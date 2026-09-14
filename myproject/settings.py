@@ -97,7 +97,9 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # MEDIA FILES
 # ========================
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Vercel (/var/task) is read-only -> set MEDIA_ROOT=/tmp in Vercel env.
+# Local default stays ./media
+MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
 
 # ========================
 # SECURITY (SAFE VERSION)

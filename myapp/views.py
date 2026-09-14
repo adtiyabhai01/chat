@@ -98,9 +98,15 @@ def signup(request):
                 mobile=mobile_int,
                 password=password,
             )
-            if profile_image:
-                user.profile_image = profile_image
             user.save()
+            if profile_image:
+                # File storage may be read-only in production (e.g. Vercel).
+                # Never let a failed upload block account creation.
+                try:
+                    user.profile_image = profile_image
+                    user.save(update_fields=['profile_image'])
+                except OSError as e:
+                    logger.warning(f'Profile image not saved for {email}: {str(e)}')
             logger.info(f'New user registered: {name} ({email})')
         except Exception as e:
             logger.error(f'Signup failed for {email}: {str(e)}')
