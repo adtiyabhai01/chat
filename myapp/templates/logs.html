@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Real-Time Logs Monitoring</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at 10% 20%, rgba(15, 25, 45, 1) 0%, rgba(5, 10, 25, 1) 100%);
+            min-height: 100vh;
+            padding: 1.5rem;
+            color: #eef2ff;
+        }
+
+        /* Glassmorphic dashboard container */
+        .dashboard-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: rgba(18, 25, 45, 0.65);
+            backdrop-filter: blur(12px);
+            border-radius: 2rem;
+            box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.12);
+            transition: all 0.2s;
+        }
+
+        /* Header with neon accent */
+        .header {
+            background: linear-gradient(105deg, rgba(10, 20, 40, 0.9) 0%, rgba(25, 35, 65, 0.9) 100%);
+            padding: 1.8rem 2rem;
+            border-bottom: 1px solid rgba(96, 165, 250, 0.4);
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.2rem;
+        }
+
+        .title h1 {
+            font-size: 1.9rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #FFFFFF 0%, #94a3f8 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .title h1 i {
+            background: none;
+            -webkit-background-clip: unset;
+            background-clip: unset;
+            color: #3b82f6;
+            font-size: 2rem;
+            text-shadow: 0 0 5px #3b82f6;
+        }
+
+        .live-indicator {
+            background: #10b981;
+            color: white;
+            padding: 0.25rem 0.9rem;
+            border-radius: 40px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 0 8px #10b981;
+            letter-spacing: 0.5px;
+        }
+
+        /* BACK BUTTON - elegant and functional */
+        .back-button-container {
+            display: inline-block;
+        }
+        .back-nav-btn {
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(96, 165, 250, 0.5);
+            color: #e2e8f0;
+            padding: 0.6rem 1.3rem;
+            border-radius: 2rem;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .back-nav-btn i {
+            font-size: 1rem;
+            transition: transform 0.2s;
+        }
+        .back-nav-btn:hover {
+            background: #3b82f6;
+            border-color: #60a5fa;
+            color: white;
+            transform: translateX(-4px);
+            box-shadow: 0 6px 14px rgba(59,130,246,0.3);
+        }
+        .back-nav-btn:hover i {
+            transform: translateX(-3px);
+        }
+
+        .stats-cards {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(8px);
+            padding: 0.6rem 1.4rem;
+            border-radius: 1.2rem;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.2s;
+        }
+
+        .stat-card:hover {
+            background: rgba(59, 130, 246, 0.2);
+            transform: translateY(-2px);
+            border-color: #3b82f6;
+        }
+
+        .stat-number {
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: linear-gradient(145deg, #f0f9ff, #b9d8ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #9ca3af;
+        }
+
+        /* refresh bar */
+        .auto-refresh-bar {
+            padding: 1rem 2rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .refresh-controls {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .refresh-toggle, .refresh-interval {
+            background: rgba(20, 30, 55, 0.8);
+            backdrop-filter: blur(4px);
+            padding: 0.5rem 1.2rem;
+            border-radius: 40px;
+            border: 1px solid rgba(255,255,255,0.15);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #334155;
+            transition: 0.25s;
+            border-radius: 34px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.25s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #3b82f6;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
+        .manual-refresh-btn {
+            background: linear-gradient(95deg, #2563eb, #4f46e5);
+            border: none;
+            padding: 0.6rem 1.3rem;
+            border-radius: 40px;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.3);
+        }
+
+        .manual-refresh-btn:hover {
+            transform: scale(1.02);
+            background: linear-gradient(95deg, #3b82f6, #6366f1);
+        }
+
+        /* controls */
+        .controls {
+            padding: 1.2rem 2rem;
+            background: rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .search-box {
+            position: relative;
+            flex: 2;
+            min-width: 240px;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #7c8db0;
+        }
+
+        #searchInput {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid #334155;
+            padding: 0.7rem 1rem 0.7rem 2.5rem;
+            border-radius: 1.2rem;
+            color: white;
+            font-family: 'Inter', monospace;
+            transition: all 0.2s;
+        }
+
+        #searchInput:focus {
+            border-color: #3b82f6;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.3);
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid #334155;
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #cbd5e6;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn.active {
+            background: #2563eb;
+            border-color: #60a5fa;
+            color: white;
+            box-shadow: 0 0 8px #3b82f6;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.6rem;
+        }
+
+        .action-btn {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #475569;
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.8rem;
+        }
+
+        .action-btn:hover {
+            background: #334155;
+            border-color: #5b6e8c;
+        }
+
+        /* table */
+        .table-container {
+            overflow-x: auto;
+            max-height: 560px;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+        }
+
+        .logs-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .logs-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: #0f172ad9;
+            backdrop-filter: blur(8px);
+        }
+
+        .logs-table th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #b9d0f0;
+            border-bottom: 1px solid #2d3a5e;
+        }
+
+        .logs-table td {
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid rgba(45, 55, 80, 0.5);
+            font-family: 'JetBrains Mono', 'Inter', monospace;
+        }
+
+        .logs-table tbody tr {
+            transition: all 0.15s;
+            cursor: pointer;
+        }
+
+        .logs-table tbody tr:hover {
+            background: rgba(59, 130, 246, 0.15);
+            transform: scale(1.001);
+        }
+
+        @keyframes flashNew {
+            0% { background-color: #fbbf2450; border-left: 3px solid #f59e0b; }
+            100% { background-color: transparent; border-left: 3px solid transparent; }
+        }
+
+        .new-log {
+            animation: flashNew 0.7s ease-out;
+        }
+
+        .level-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0.25rem 0.9rem;
+            border-radius: 40px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            backdrop-filter: blur(2px);
+        }
+
+        .level-error { background: #7f1a1a80; color: #ffb3b3; border-left: 3px solid #ef4444; }
+        .level-warning { background: #78350f80; color: #ffd89c; border-left: 3px solid #f97316; }
+        .level-info { background: #1e3a8a80; color: #b3e0ff; border-left: 3px solid #3b82f6; }
+        .level-debug { background: #2d374b80; color: #cbd5ff; border-left: 3px solid #a5b4fc; }
+        .level-critical { background: #4c051980; color: #ffa7c4; border-left: 3px solid #e11d48; }
+
+        .highlight {
+            background: #facc15cc;
+            color: #0f172a;
+            font-weight: 600;
+            border-radius: 6px;
+            padding: 0 4px;
+        }
+
+        .footer {
+            padding: 0.9rem 2rem;
+            background: rgba(0, 0, 0, 0.4);
+            border-top: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        /* toast modern */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: #1e293bdd;
+            backdrop-filter: blur(12px);
+            border-left: 4px solid #3b82f6;
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 500;
+            z-index: 2000;
+            animation: slideUp 0.2s ease;
+            box-shadow: 0 15px 30px -12px black;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 8px;
+        }
+
+        @media (max-width: 700px) {
+            body { padding: 0.8rem; }
+            .stats-cards .stat-card { padding: 0.3rem 1rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+    <div class="header">
+        <div class="header-top">
+            <div class="title">
+                <h1><i class="fas fa-bolt"></i> Logs Monitoring 
+                    <span class="live-indicator"><i class="fas fa-circle"></i> STREAM ACTIVE</span>
+                    <span class="live-indicator"><i class="fas fa-circle"></i> Live </span>
+                </h1>
+                
+            </div>
+            <div class="back-button-container">
+                <!-- 🔙 BACK BUTTON - fully functional, elegant navigation -->
+                <button class="back-nav-btn" id="backNavigationBtn">
+                    <i class="fas fa-arrow-left"></i> 
+                    <span>Back</span>
+                </button>
+            </div>
+            <div class="stats-cards">
+                <div class="stat-card"><div class="stat-number" id="totalCount">0</div><div class="stat-label">Total Events</div></div>
+                <div class="stat-card"><div class="stat-number" id="errorCount">0</div><div class="stat-label">Errors</div></div>
+                <div class="stat-card"><div class="stat-number" id="warningCount">0</div><div class="stat-label">Warnings</div></div>
+                <div class="stat-card"><div class="stat-number" id="rateMetric">0</div><div class="stat-label">Events/min</div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="auto-refresh-bar">
+        <div class="refresh-controls">
+            <div class="refresh-toggle"><i class="fas fa-sync-alt"></i><span>Live Stream</span>
+                <label class="toggle-switch"><input type="checkbox" id="autoRefreshToggle" checked><span class="toggle-slider"></span></label>
+            </div>
+            <div class="refresh-interval"><i class="fas fa-gauge-high"></i><span>Rate</span>
+                <select id="refreshInterval">
+                    <option value="800">0.8s (Burst)</option>
+                    <option value="2000">2s</option>
+                    <option value="5000" selected>5s</option>
+                    <option value="10000">10s</option>
+                </select>
+            </div>
+        </div>
+        <button class="manual-refresh-btn" id="manualRefreshBtn"><i class="fas fa-bolt"></i> Inject Log</button>
+    </div>
+
+    <div class="controls">
+        <div class="search-box"><i class="fas fa-filter"></i><input type="text" id="searchInput" placeholder="Grep logs (time, level, message) ..."></div>
+        <div class="filter-buttons">
+            <button class="filter-btn active" data-level="all">All</button>
+            <button class="filter-btn" data-level="CRITICAL">CRITICAL</button>
+            <button class="filter-btn" data-level="ERROR">ERROR</button>
+            <button class="filter-btn" data-level="WARNING">WARN</button>
+            <button class="filter-btn" data-level="INFO">INFO</button>
+            <button class="filter-btn" data-level="DEBUG">DEBUG</button>
+        </div>
+        <div class="action-buttons">
+            <button class="action-btn" id="copyTableBtn"><i class="fas fa-copy"></i> Copy view</button>
+            <button class="action-btn" id="exportBtn"><i class="fas fa-download"></i> CSV</button>
+            <button class="action-btn" id="clearFiltersBtn"><i class="fas fa-eraser"></i> Reset</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table class="logs-table" id="logsTable">
+            <thead><tr><th style="width:170px"><i class="far fa-clock"></i> Timestamp</th><th style="width:120px">Severity</th><th>Event Payload</th></tr></thead>
+            <tbody id="tableBody">
+                <!-- initial smart logs -->
+                <tr data-level="INFO"><td class="time-col">2025-03-18 09:12:34</td><td><span class="level-badge level-info"><i class="fas fa-info-circle"></i> INFO</span></td><td class="message-col">Nexus core initialized · cluster stable</td></tr>
+                <tr data-level="WARNING"><td class="time-col">2025-03-18 09:10:02</td><td><span class="level-badge level-warning"><i class="fas fa-exclamation-triangle"></i> WARNING</span></td><td class="message-col">Cache latency spike (320ms) above threshold</td></tr>
+                <tr data-level="ERROR"><td class="time-col">2025-03-18 09:07:55</td><td><span class="level-badge level-error"><i class="fas fa-bug"></i> ERROR</span></td><td class="message-col">Auth gateway timeout: pod auth-7b latency</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="footer"><div><i class="fas fa-eye"></i> Showing <span id="displayedCount">0</span> / <span id="footerTotal">0</span> logs</div><div><i class="fas fa-mouse-pointer"></i> Click any row → copy raw log</div></div>
+</div>
+
+<script>
+    // ---------- ADVANCED LOG GENERATOR (realistic, dynamic) ----------
+    const techMessages = [
+        "API Gateway /v3/auth latency spike", "Redis cluster failover completed", "K8s pod OOMKilled (memory limit)", "Disk I/O saturation on node-4", "SSL cert expiry in 14 days", "User login anomaly from IP 203.0.113.89", "Database replication lag 3.2s", "Circuit breaker opened for payment service", "S3 bucket policy updated", "Lambda cold start duration 876ms", "CloudFront 5xx rate increased", "WAF blocked malicious pattern", "Helm release upgraded successfully", "Prometheus target down", "Grafana alert resolved: CPU > 90%"
+    ];
+    const levelsList = ["INFO", "DEBUG", "WARNING", "ERROR", "CRITICAL"];
+    function getWeightedLevel() {
+        const r = Math.random();
+        if (r < 0.45) return "INFO";
+        if (r < 0.65) return "DEBUG";
+        if (r < 0.8) return "WARNING";
+        if (r < 0.94) return "ERROR";
+        return "CRITICAL";
+    }
+
+    function generateSmartLog() {
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}.${String(now.getMilliseconds()).slice(0,2)}`;
+        const level = getWeightedLevel();
+        let msg = techMessages[Math.floor(Math.random() * techMessages.length)];
+        if (level === "ERROR") msg = `[ERROR] ${msg} · trace_id=${Math.random().toString(36).substring(2,8)}`;
+        else if (level === "CRITICAL") msg = `🚨 CRITICAL: ${msg} · immediate action required`;
+        else if (level === "WARNING") msg = `⚠️ ${msg} · recommended check`;
+        else msg = `📡 ${msg}`;
+        return { time: timestamp, level, message: msg };
+    }
+
+    // ---- state ----
+    let allRows = Array.from(document.querySelectorAll('#tableBody tr'));
+    let currentLevelFilter = 'all';
+    let currentSearchQuery = '';
+    let autoRefreshIntervalId = null;
+    let eventRateCounter = 0;
+    let rateTimer = null;
+
+    // DOM refs
+    const tableBody = document.getElementById('tableBody');
+    const searchInput = document.getElementById('searchInput');
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+    const copyTableBtn = document.getElementById('copyTableBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+    const refreshIntervalSelect = document.getElementById('refreshInterval');
+    const manualRefreshBtn = document.getElementById('manualRefreshBtn');
+    const totalCountSpan = document.getElementById('totalCount');
+    const errorCountSpan = document.getElementById('errorCount');
+    const warningCountSpan = document.getElementById('warningCount');
+    const rateMetricSpan = document.getElementById('rateMetric');
+    const displayedCountSpan = document.getElementById('displayedCount');
+    const footerTotalSpan = document.getElementById('footerTotal');
+
+    // ---------- BACK BUTTON FUNCTIONALITY (core requirement) ----------
+    const backButton = document.getElementById('backNavigationBtn');
+    if (backButton) {
+        backButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            // Smart back navigation: if there's a previous page in history, go back.
+            // Otherwise, provide a graceful fallback (close window or redirect to a safe URL)
+            if (window.history.length > 1) {
+                window.history.back();
+                showToast("↩️ Navigating back...", "info");
+            } else {
+                // Fallback: You can customize this to your previous dashboard or homepage
+                // For demo, we show a toast and optionally redirect to a placeholder.
+                // Since this is a standalone page, we can also provide a friendly message.
+                // Many real-world apps would redirect to a main dashboard.
+                showToast("No previous page in history. Redirecting to safe fallback.", "info");
+                // Optional fallback: redirect to a safe page like '/' or '#'
+                // Uncomment the line below if you have a main index:
+                // window.location.href = '/';
+                // For demonstration, we do nothing destructive, just alert.
+                console.log("Back button: no history, staying on page.");
+            }
+        });
+    }
+
+    // helpers
+    function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+    function escapeRegExp(str) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    
+    function highlightText(text, query) {
+        if (!query) return escapeHtml(text);
+        const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+        return escapeHtml(text).replace(regex, '<span class="highlight">$1</span>');
+    }
+
+    function updateStatsAndUI() {
+        const total = allRows.length;
+        const errors = allRows.filter(r => r.getAttribute('data-level') === 'ERROR').length;
+        const warnings = allRows.filter(r => r.getAttribute('data-level') === 'WARNING').length;
+        totalCountSpan.textContent = total;
+        errorCountSpan.textContent = errors;
+        warningCountSpan.textContent = warnings;
+        footerTotalSpan.textContent = total;
+        if (!rateTimer) {
+            rateTimer = setInterval(() => { rateMetricSpan.textContent = Math.floor(eventRateCounter); eventRateCounter = 0; }, 60000);
+        }
+    }
+
+    function applyFiltersAndRender() {
+        let visible = 0;
+        const query = currentSearchQuery.trim();
+        allRows.forEach(row => {
+            const level = row.getAttribute('data-level');
+            const timeRaw = row.cells[0].innerText;
+            const messageRaw = row.cells[2].innerText;
+            const levelTextRaw = row.cells[1].innerText.trim();
+            const levelMatch = (currentLevelFilter === 'all' || level === currentLevelFilter);
+            let searchMatch = true;
+            if (query) {
+                const lowerQ = query.toLowerCase();
+                searchMatch = timeRaw.toLowerCase().includes(lowerQ) || messageRaw.toLowerCase().includes(lowerQ) || levelTextRaw.toLowerCase().includes(lowerQ);
+            }
+            if (levelMatch && searchMatch) {
+                row.style.display = '';
+                visible++;
+                if (query) {
+                    row.cells[0].innerHTML = highlightText(timeRaw, query);
+                    row.cells[2].innerHTML = highlightText(messageRaw, query);
+                } else {
+                    row.cells[0].innerHTML = escapeHtml(timeRaw);
+                    row.cells[2].innerHTML = escapeHtml(messageRaw);
+                }
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        displayedCountSpan.textContent = visible;
+        const emptyRow = document.getElementById('emptyStateRow');
+        if (visible === 0 && !emptyRow) {
+            const er = document.createElement('tr');
+            er.id = 'emptyStateRow';
+            er.innerHTML = `<td colspan="3" class="empty-state" style="text-align:center;padding:3rem;"><i class="fas fa-database"></i> <span style="color:#94a3b8;">No logs match criteria</span></td>`;
+            tableBody.appendChild(er);
+        } else if (visible > 0 && emptyRow) emptyRow.remove();
+    }
+
+    function addNewLogEntry(logData) {
+        const newRow = document.createElement('tr');
+        newRow.setAttribute('data-level', logData.level);
+        const levelClass = logData.level.toLowerCase();
+        let icon = 'fa-info-circle';
+        if (logData.level === 'ERROR') icon = 'fa-bug';
+        else if (logData.level === 'WARNING') icon = 'fa-exclamation-triangle';
+        else if (logData.level === 'CRITICAL') icon = 'fa-skull-crossbones';
+        else if (logData.level === 'DEBUG') icon = 'fa-code';
+        newRow.innerHTML = `
+            <td class="time-col">${escapeHtml(logData.time)}</td>
+            <td><span class="level-badge level-${levelClass}"><i class="fas ${icon}"></i> ${logData.level}</span></td>
+            <td class="message-col">${escapeHtml(logData.message)}</td>
+        `;
+        newRow.addEventListener('click', (e) => { e.stopPropagation(); copySingleLogEntry(newRow); });
+        if (tableBody.firstChild) tableBody.insertBefore(newRow, tableBody.firstChild);
+        else tableBody.appendChild(newRow);
+        newRow.classList.add('new-log');
+        setTimeout(() => newRow.classList.remove('new-log'), 800);
+        allRows = Array.from(document.querySelectorAll('#tableBody tr'));
+        updateStatsAndUI();
+        applyFiltersAndRender();
+        eventRateCounter++;
+        if (allRows.length > 750) {
+            const rowsToRemove = allRows.slice(750);
+            rowsToRemove.forEach(r => r.remove());
+            allRows = Array.from(document.querySelectorAll('#tableBody tr'));
+            updateStatsAndUI();
+            applyFiltersAndRender();
+        }
+    }
+
+    async function fetchNewLogAsync() {
+        return new Promise(resolve => {
+            setTimeout(() => resolve(generateSmartLog()), 40);
+        });
+    }
+
+    async function refreshLogs() {
+        try {
+            const newLog = await fetchNewLogAsync();
+            addNewLogEntry(newLog);
+        } catch (err) { console.warn(err); showToast("Stream error", "error"); }
+    }
+
+    function copySingleLogEntry(row) {
+        const time = row.cells[0].textContent;
+        const levelSpan = row.cells[1].innerText;
+        const msg = row.cells[2].textContent;
+        const logLine = `[${time}] ${levelSpan.trim()} : ${msg}`;
+        navigator.clipboard.writeText(logLine).then(() => showToast(`📋 Copied: ${msg.slice(0,60)}`, "info")).catch(()=>showToast("Copy failed","error"));
+    }
+
+    function copyVisibleLogs() {
+        const visible = allRows.filter(r => r.style.display !== 'none');
+        if(visible.length===0) { showToast("No logs to copy","error"); return; }
+        let text = "";
+        visible.forEach(r => { text += `[${r.cells[0].textContent}] ${r.cells[1].innerText.trim()} → ${r.cells[2].textContent}\n`; });
+        navigator.clipboard.writeText(text).then(()=>showToast(`Copied ${visible.length} logs`));
+    }
+
+    function exportCSV() {
+        const visible = allRows.filter(r => r.style.display !== 'none');
+        if(visible.length===0) { showToast("No data to export","error"); return; }
+        let csv = "Timestamp,Level,Message\n";
+        visible.forEach(r => {
+            let time = r.cells[0].textContent;
+            let level = r.cells[1].innerText.trim();
+            let msg = r.cells[2].textContent.replace(/"/g, '""');
+            csv += `"${time}","${level}","${msg}"\n`;
+        });
+        const blob = new Blob([csv], {type: "text/csv"});
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `nexus_logs_${new Date().toISOString().slice(0,19)}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        showToast(`Exported ${visible.length} records`);
+    }
+
+    function showToast(msg, type="success") {
+        const toastDiv = document.createElement('div');
+        toastDiv.className = 'toast';
+        toastDiv.innerHTML = `<i class="fas ${type==='error'?'fa-circle-exclamation':'fa-check-circle'}"></i><span>${msg}</span>`;
+        document.body.appendChild(toastDiv);
+        setTimeout(()=>toastDiv.remove(), 2200);
+    }
+
+    function startAutoRefresh() {
+        if(autoRefreshIntervalId) clearInterval(autoRefreshIntervalId);
+        const intervalMs = parseInt(refreshIntervalSelect.value,10);
+        autoRefreshIntervalId = setInterval(() => { if(autoRefreshToggle.checked) refreshLogs(); }, intervalMs);
+    }
+
+    function stopAutoRefresh() { if(autoRefreshIntervalId) { clearInterval(autoRefreshIntervalId); autoRefreshIntervalId = null; } }
+
+    // ---- event handlers ----
+    searchInput.addEventListener('input', (e) => { currentSearchQuery = e.target.value; applyFiltersAndRender(); });
+    filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterBtns.forEach(b=>b.classList.remove('active'));
+            btn.classList.add('active');
+            currentLevelFilter = btn.getAttribute('data-level');
+            applyFiltersAndRender();
+        });
+    });
+    clearFiltersBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        currentSearchQuery = '';
+        currentLevelFilter = 'all';
+        filterBtns.forEach(btn=>{ if(btn.getAttribute('data-level')==='all') btn.classList.add('active'); else btn.classList.remove('active'); });
+        applyFiltersAndRender();
+        showToast("Filters cleared", "info");
+    });
+    copyTableBtn.addEventListener('click', copyVisibleLogs);
+    exportBtn.addEventListener('click', exportCSV);
+    manualRefreshBtn.addEventListener('click', () => { refreshLogs(); showToast("Manual log injection", "info"); });
+    autoRefreshToggle.addEventListener('change', (e) => { e.target.checked ? (startAutoRefresh(), showToast("Live stream ON")) : (stopAutoRefresh(), showToast("Stream paused")); });
+    refreshIntervalSelect.addEventListener('change', () => { if(autoRefreshToggle.checked) startAutoRefresh(); showToast(`Stream rate updated`); });
+
+    function attachRowClickToExisting() { allRows.forEach(r => r.addEventListener('click', ()=>copySingleLogEntry(r))); }
+
+    function init() {
+        updateStatsAndUI();
+        attachRowClickToExisting();
+        applyFiltersAndRender();
+        startAutoRefresh();
+        for(let i=0;i<5;i++) setTimeout(()=>refreshLogs(), i*200);
+    }
+    init();
+</script>
+</body>
+</html>

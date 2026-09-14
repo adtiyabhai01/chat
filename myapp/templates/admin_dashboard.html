@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #080810; --surface: rgba(255,255,255,0.04); --border: rgba(255,255,255,0.08);
+            --text: #f0f0ff; --muted: #6b7280; --accent: #7c3aed; --accent2: #4f46e5;
+            --success: #22c55e; --warning: #f59e0b; --error: #ef4444; --info: #3b82f6;
+        }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+        body::before, body::after { content: ''; position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
+        body::before { width: 500px; height: 500px; background: radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%); top: -100px; left: -100px; }
+        body::after { width: 400px; height: 400px; background: radial-gradient(circle, rgba(79,70,229,0.12), transparent 70%); bottom: -80px; right: -80px; }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
+
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+        .header h1 { font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+        .header-actions { display: flex; gap: 10px; }
+
+        .btn { padding: 9px 18px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+        .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.07); }
+        .btn-maint-off { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+        .btn-maint-off:hover { background: rgba(34,197,94,0.25); }
+        .btn-maint-on { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+        .btn-maint-on:hover { background: rgba(239,68,68,0.25); }
+
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+        .stat-card h3 { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+        .stat-sub { font-size: 11px; color: var(--muted); }
+        .stat-online .stat-value { color: var(--success); }
+        .stat-msg .stat-value { color: var(--info); }
+        .stat-err .stat-value { color: var(--error); }
+
+        /* Section */
+        .section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 20px; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }
+        .section-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .section-title i { color: var(--accent); }
+
+        /* Server Health */
+        .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+        .health-item { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+        .health-label { font-size: 11px; color: var(--muted); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; }
+        .health-value { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+        .health-bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
+        .health-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+        .bar-green { background: var(--success); }
+        .bar-yellow { background: var(--warning); }
+        .bar-red { background: var(--error); }
+        .health-sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+        .health-error { color: var(--error); font-size: 12px; padding: 10px; }
+
+        /* Online Users Table */
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+        .data-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.02); font-size: 12px; }
+        .data-table tbody tr:hover { background: rgba(124,58,237,0.06); }
+
+        .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+        .badge-online { background: rgba(34,197,94,0.15); color: #4ade80; }
+        .badge-offline { background: rgba(107,114,128,0.15); color: #9ca3af; }
+        .badge-mobile { background: rgba(59,130,246,0.15); color: #60a5fa; }
+        .badge-desktop { background: rgba(139,92,246,0.15); color: #c4b5fd; }
+        .badge-tablet { background: rgba(245,158,11,0.15); color: #fbbf24; }
+
+        /* Logs */
+        .filter-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+        .filter-btn { padding: 6px 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px; color: var(--text); cursor: pointer; font-size: 11px; font-weight: 600; transition: all 0.2s; }
+        .filter-btn:hover, .filter-btn.active { background: rgba(124,58,237,0.2); border-color: rgba(124,58,237,0.5); color: #c4b5fd; }
+
+        .log-level { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+        .log-level.info { background: rgba(59,130,246,0.2); color: #60a5fa; }
+        .log-level.warning { background: rgba(245,158,11,0.2); color: #fbbf24; }
+        .log-level.error, .log-level.critical { background: rgba(239,68,68,0.2); color: #f87171; }
+        .log-level.debug { background: rgba(139,92,246,0.2); color: #c4b5fd; }
+        .log-time { color: var(--muted); font-family: monospace; font-size: 11px; }
+        .log-message { word-break: break-word; max-width: 500px; font-size: 12px; }
+        .log-source { display: inline-block; padding: 2px 7px; background: rgba(255,255,255,0.05); border-radius: 5px; font-size: 10px; color: var(--muted); }
+
+        .empty-state { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; }
+        .dot-online { width: 7px; height: 7px; border-radius: 50%; background: var(--success); display: inline-block; box-shadow: 0 0 6px rgba(34,197,94,0.8); animation: blink 2s infinite; }
+        .dot-offline { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+        @media(max-width:768px) {
+            .header { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .data-table { font-size: 11px; }
+            .data-table th, .data-table td { padding: 8px 6px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <h1><i class="fas fa-chart-line"></i> Admin Dashboard</h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="loadAll()"><i class="fas fa-sync" id="refreshIcon"></i> Refresh</button>
+            <button class="btn" id="maintBtn" onclick="toggleMaintenance()"><i class="fas fa-tools"></i> <span id="maintText">Maintenance: OFF</span></button>
+            <a href="/home/" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back</a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card stat-online">
+            <h3>Online Users</h3>
+            <div class="stat-value" id="onlineUsers">—</div>
+            <div class="stat-sub">Currently active</div>
+        </div>
+        <div class="stat-card">
+            <h3>Total Users</h3>
+            <div class="stat-value" id="totalUsers">—</div>
+            <div class="stat-sub">Registered</div>
+        </div>
+        <div class="stat-card stat-msg">
+            <h3>Total Messages</h3>
+            <div class="stat-value" id="totalMessages">—</div>
+            <div class="stat-sub">All time</div>
+        </div>
+        <div class="stat-card">
+            <h3>Recent Activity</h3>
+            <div class="stat-value" id="recentActivity">—</div>
+            <div class="stat-sub">Last 24 hours</div>
+        </div>
+        <div class="stat-card stat-err">
+            <h3>Errors</h3>
+            <div class="stat-value" id="errorCount">—</div>
+            <div class="stat-sub">In logs</div>
+        </div>
+    </div>
+
+    <!-- Server Health -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-server"></i> Server Health</div>
+            <span style="font-size:11px;color:var(--muted)" id="healthUpdated"></span>
+        </div>
+        <div id="healthContent"><div class="empty-state"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
+    </div>
+
+    <!-- Online Users & Device Info -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-users"></i> Users — Online / Offline & Device Info</div>
+        </div>
+        <div style="overflow-x:auto">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Device</th>
+                        <th>Browser</th>
+                        <th>OS</th>
+                        <th>IP</th>
+                        <th>Last Seen</th>
+                        <th>Location</th>
+                    </tr>
+                </thead>
+                <tbody id="usersBody"><tr><td colspan="8" class="empty-state"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Error Logs -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-file-alt"></i> Error Logs</div>
+            <div class="filter-controls">
+                <button class="filter-btn active" onclick="filterLogs('all', this)">All</button>
+                <button class="filter-btn" onclick="filterLogs('ERROR', this)">Errors</button>
+                <button class="filter-btn" onclick="filterLogs('WARNING', this)">Warnings</button>
+                <button class="filter-btn" onclick="filterLogs('INFO', this)">Info</button>
+            </div>
+        </div>
+        <div style="overflow-x:auto">
+            <table class="data-table">
+                <thead>
+                    <tr><th>Time</th><th>Level</th><th>Message</th><th>Source</th></tr>
+                </thead>
+                <tbody id="logsBody"><tr><td colspan="4" class="empty-state"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let allLogs = [];
+    let currentFilter = 'all';
+
+    function loadAll() {
+        const icon = document.getElementById('refreshIcon');
+        icon.classList.add('fa-spin');
+        Promise.all([loadStats(), loadHealth(), loadUsers(), loadLogs()])
+            .finally(() => icon.classList.remove('fa-spin'));
+    }
+
+    function loadStats() {
+        return fetch('/admin-stats/')
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('onlineUsers').textContent = d.online_users ?? '—';
+                document.getElementById('totalUsers').textContent = d.total_users ?? '—';
+                document.getElementById('totalMessages').textContent = d.total_messages ?? '—';
+                document.getElementById('recentActivity').textContent = d.recent_activity ?? '—';
+            }).catch(() => {});
+    }
+
+    function loadHealth() {
+        return fetch('/admin-server-health/')
+            .then(r => r.json())
+            .then(d => {
+                if (d.error) {
+                    document.getElementById('healthContent').innerHTML = `<div class="health-error"><i class="fas fa-exclamation-triangle"></i> ${d.error}</div>`;
+                    return;
+                }
+                const barColor = p => p > 85 ? 'bar-red' : p > 60 ? 'bar-yellow' : 'bar-green';
+                document.getElementById('healthContent').innerHTML = `
+                    <div class="health-grid">
+                        <div class="health-item">
+                            <div class="health-label">CPU Usage</div>
+                            <div class="health-value" style="color:${d.cpu_percent>85?'var(--error)':d.cpu_percent>60?'var(--warning)':'var(--success)'}">${d.cpu_percent}%</div>
+                            <div class="health-bar"><div class="health-bar-fill ${barColor(d.cpu_percent)}" style="width:${d.cpu_percent}%"></div></div>
+                        </div>
+                        <div class="health-item">
+                            <div class="health-label">Memory</div>
+                            <div class="health-value" style="color:${d.memory_percent>85?'var(--error)':d.memory_percent>60?'var(--warning)':'var(--success)'}">${d.memory_percent}%</div>
+                            <div class="health-bar"><div class="health-bar-fill ${barColor(d.memory_percent)}" style="width:${d.memory_percent}%"></div></div>
+                            <div class="health-sub">${d.memory_used_mb} MB / ${d.memory_total_mb} MB</div>
+                        </div>
+                        <div class="health-item">
+                            <div class="health-label">Disk</div>
+                            <div class="health-value" style="color:${d.disk_percent>85?'var(--error)':d.disk_percent>60?'var(--warning)':'var(--success)'}">${d.disk_percent}%</div>
+                            <div class="health-bar"><div class="health-bar-fill ${barColor(d.disk_percent)}" style="width:${d.disk_percent}%"></div></div>
+                            <div class="health-sub">${d.disk_used_gb} GB / ${d.disk_total_gb} GB</div>
+                        </div>
+                    </div>`;
+                document.getElementById('healthUpdated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+            }).catch(() => {
+                document.getElementById('healthContent').innerHTML = '<div class="health-error">Failed to load server health</div>';
+            });
+    }
+
+    function loadUsers() {
+        return fetch('/admin-online-users/')
+            .then(r => r.json())
+            .then(d => {
+                const tbody = document.getElementById('usersBody');
+                if (!d.sessions || d.sessions.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No user sessions found</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = d.sessions.map(s => {
+                    const hasLoc = s.latitude && s.longitude;
+                    const coordText = hasLoc ? `${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}` : 'N/A';
+                    const viewBtn = hasLoc
+                        ? `<a href="https://www.google.com/maps?q=${s.latitude},${s.longitude}" target="_blank"
+                            style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:8px;color:#60a5fa;font-size:11px;font-weight:600;text-decoration:none;margin-left:6px;">
+                            <i class="fas fa-map-marker-alt"></i> View
+                           </a>`
+                        : '';
+                    return `
+                    <tr>
+                        <td><span class="${s.is_online ? 'dot-online' : 'dot-offline'}"></span> <span class="badge ${s.is_online ? 'badge-online' : 'badge-offline'}">${s.is_online ? 'Online' : 'Offline'}</span></td>
+                        <td style="font-weight:600">${esc(s.user)}</td>
+                        <td style="color:var(--muted)">${esc(s.email)}</td>
+                        <td><span class="badge badge-${s.device_type}"><i class="fas fa-${s.device_type==='mobile'?'mobile-alt':s.device_type==='tablet'?'tablet-alt':'desktop'}"></i> ${s.device_type}</span></td>
+                        <td>${esc(s.browser)}</td>
+                        <td>${esc(s.os)}</td>
+                        <td style="font-family:monospace;font-size:11px;color:var(--muted)">${esc(s.ip)}</td>
+                        <td style="color:var(--muted);font-size:11px">${esc(s.last_seen)}</td>
+                        <td style="font-family:monospace;font-size:11px;white-space:nowrap">${coordText}${viewBtn}</td>
+                    </tr>`;
+                }).join('');
+
+                // update error count from logs
+            }).catch(() => {
+                document.getElementById('usersBody').innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load users</td></tr>';
+            });
+    }
+
+    function loadLogs() {
+        return fetch('/admin-logs/')
+            .then(r => r.json())
+            .then(d => {
+                allLogs = d.logs || [];
+                const errCount = allLogs.filter(l => l.level === 'ERROR' || l.level === 'CRITICAL').length;
+                document.getElementById('errorCount').textContent = errCount;
+                renderLogs();
+            }).catch(() => {
+                document.getElementById('logsBody').innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load logs</td></tr>';
+            });
+    }
+
+    function renderLogs() {
+        const tbody = document.getElementById('logsBody');
+        const filtered = currentFilter === 'all' ? allLogs : allLogs.filter(l => l.level === currentFilter);
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No logs found</td></tr>';
+            return;
+        }
+        tbody.innerHTML = filtered.map(l => `
+            <tr>
+                <td class="log-time">${l.time}</td>
+                <td><span class="log-level ${l.level.toLowerCase()}">${l.level}</span></td>
+                <td class="log-message">${esc(l.message)}</td>
+                <td><span class="log-source">${esc(l.source)}</span></td>
+            </tr>`).join('');
+    }
+
+    function filterLogs(level, btn) {
+        currentFilter = level;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderLogs();
+    }
+
+    function esc(t) {
+        const d = document.createElement('div');
+        d.textContent = t || '';
+        return d.innerHTML;
+    }
+
+    // Load on start, refresh every 15s
+    loadAll();
+    setInterval(loadAll, 15000);
+
+    // Maintenance toggle
+    let maintenanceOn = false;
+
+    function loadMaintenanceStatus() {
+        fetch('/admin-maintenance/')
+            .then(r => r.json())
+            .then(d => updateMaintBtn(d.maintenance))
+            .catch(() => {});
+    }
+
+    function updateMaintBtn(isOn) {
+        maintenanceOn = isOn;
+        const btn = document.getElementById('maintBtn');
+        const txt = document.getElementById('maintText');
+        btn.className = 'btn ' + (isOn ? 'btn-maint-on' : 'btn-maint-off');
+        txt.textContent = 'Maintenance: ' + (isOn ? 'ON' : 'OFF');
+    }
+
+    function toggleMaintenance() {
+        const newState = !maintenanceOn;
+        showConfirmModal(
+            newState ? '⚠️ Enable Maintenance Mode?' : '✅ Disable Maintenance Mode?',
+            newState
+                ? 'All logged-in users will instantly see the maintenance screen. Only you (admin) can access the site.'
+                : 'Site will be restored. All users will get access immediately.',
+            newState ? 'Enable' : 'Disable',
+            newState ? '#ef4444' : '#22c55e',
+            () => {
+                fetch('/admin-maintenance/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+                    body: JSON.stringify({enabled: newState})
+                })
+                .then(r => r.json())
+                .then(d => updateMaintBtn(d.maintenance))
+                .catch(() => {});
+            }
+        );
+    }
+
+    function showConfirmModal(title, desc, confirmText, confirmColor, onConfirm) {
+        document.getElementById('modalOverlay')?.remove();
+        const overlay = document.createElement('div');
+        overlay.id = 'modalOverlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        overlay.innerHTML = `
+            <div style="background:#0f0f1a;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px;max-width:420px;width:90%;box-shadow:0 25px 60px rgba(0,0,0,0.5);">
+                <div style="font-size:20px;font-weight:800;color:#f0f0ff;margin-bottom:10px;">${title}</div>
+                <div style="font-size:13px;color:#6b7280;line-height:1.6;margin-bottom:28px;">${desc}</div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button onclick="document.getElementById('modalOverlay').remove()" style="padding:10px 20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#f0f0ff;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>
+                    <button id="modalConfirmBtn" style="padding:10px 20px;background:${confirmColor};border:none;border-radius:10px;color:white;font-size:13px;font-weight:700;cursor:pointer;">${confirmText}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        document.getElementById('modalConfirmBtn').onclick = () => {
+            overlay.remove();
+            onConfirm();
+        };
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    }
+
+    function getCookie(name) {
+        const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+        return v ? v[2] : '';
+    }
+
+    loadMaintenanceStatus();
+</script>
+</body>
+</html>

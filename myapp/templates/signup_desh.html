@@ -1,0 +1,74 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>DashSocial — Welcome</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/signup_desh.css' %}">
+</head>
+<body>
+
+<div class="bg-animation">
+    <div class="circle circle-1"></div>
+    <div class="circle circle-2"></div>
+    <div class="circle circle-3"></div>
+    <div class="circle circle-4"></div>
+</div>
+
+<div class="container">
+    <div class="card">
+
+        <div class="logo-wrapper">
+            <div class="logo">DashSocial</div>
+            <div class="logo-badge"></div>
+        </div>
+
+        <div class="welcome-text">
+            <h2>Connect with everyone</h2>
+            <p>Real-time messaging, read receipts, and a premium experience — all in one place.</p>
+        </div>
+
+        <div class="divider">
+            <div class="divider-line"></div>
+            <div class="divider-text">get started</div>
+            <div class="divider-line"></div>
+        </div>
+
+        <div class="social-login">
+            <a href="{% url 'login' %}" class="social-btn google">
+                <i class="fas fa-sign-in-alt" style="margin-right:8px"></i>Log In
+            </a>
+            <a href="{% url 'signup' %}" class="social-btn facebook">
+                <i class="fas fa-user-plus" style="margin-right:8px"></i>Sign Up
+            </a>
+        </div>
+
+        <div class="features">
+            <div class="feat">
+                <div class="feat-icon" style="background:rgba(16,185,129,0.12);color:#34d399;"><i class="fas fa-check-double"></i></div>
+                <div class="feat-lbl">Read Receipts</div>
+            </div>
+            <div class="feat">
+                <div class="feat-icon" style="background:rgba(59,130,246,0.12);color:#60a5fa;"><i class="fas fa-bolt"></i></div>
+                <div class="feat-lbl">Real-time</div>
+            </div>
+            <div class="feat">
+                <div class="feat-icon" style="background:rgba(139,92,246,0.12);color:#a78bfa;"><i class="fas fa-shield-alt"></i></div>
+                <div class="feat-lbl">Secure</div>
+            </div>
+            <div class="feat">
+                <div class="feat-icon" style="background:rgba(245,158,11,0.12);color:#fbbf24;"><i class="fas fa-mobile-alt"></i></div>
+                <div class="feat-lbl">Responsive</div>
+            </div>
+        </div>
+
+        <div id="messageContainer" class="message-container" style="display:none;"></div>
+    </div>
+
+    <div class="footer-note">© 2025 DashSocial · Built with ❤️</div>
+</div>
+
+</body>
+</html>

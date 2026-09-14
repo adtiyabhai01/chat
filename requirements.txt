@@ -1,0 +1,8 @@
+Django==6.0.3
+gunicorn==21.2.0
+whitenoise==6.7.0
+Pillow==12.1.0
+python-decouple==3.8
+dj-database-url==2.2.0
+psycopg2-binary==2.9.9
+psutil==5.9.8

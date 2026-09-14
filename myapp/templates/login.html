@@ -1,0 +1,59 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Login — DashSocial</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/login.css' %}">
+</head>
+<body>
+<div class="orb2"></div>
+<div class="container">
+
+    <a href="javascript:history.back()" class="back-button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back
+    </a>
+
+    {% if msg %}
+    <div id="alertBox" class="alert">{{ msg }}</div>
+    <script>setTimeout(()=>{const a=document.getElementById('alertBox');if(a){a.style.transition='opacity .4s';a.style.opacity='0';setTimeout(()=>a.remove(),400);}},4000);</script>
+    {% endif %}
+
+    <div class="card">
+        <div class="logo"><span>DashSocial</span></div>
+        <form class="login-form" action="{% url 'login' %}" method="post">
+            {% csrf_token %}
+            <div class="input-group">
+                <input type="email" name="email" placeholder="Email address" required autocomplete="email">
+            </div>
+            <div class="input-group">
+                <input type="password" name="password" placeholder="Password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="login-btn">Log In</button>
+        </form>
+        <div class="signup-link">Don't have an account? <a href="{% url 'signup' %}">Sign up</a></div>
+    </div>
+
+</div>
+<script>
+// After page load, if user just logged in (redirected to home), request location
+// We request location on login page so browser asks permission before redirect
+if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            fetch('/save-location/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''},
+                body: JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude})
+            }).catch(() => {});
+        },
+        () => {} // user denied - silently ignore
+    );
+}
+</script>
+</body>
+</html>

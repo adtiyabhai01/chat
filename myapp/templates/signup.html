@@ -1,0 +1,105 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Sign Up — DashSocial</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/signup.css' %}">
+</head>
+<body>
+<div class="orb2"></div>
+<div class="container">
+
+    <!-- Left illustration panel -->
+    <div class="illus">
+        <div class="illus-card">
+            <div class="illus-brand">DashSocial</div>
+            <div class="illus-tagline">Connect, chat, and stay in sync with the people that matter.</div>
+        </div>
+        <div class="illus-card">
+            <div class="illus-stats">
+                <div class="stat-box"><div class="stat-num">∞</div><div class="stat-lbl">Messages</div></div>
+                <div class="stat-box"><div class="stat-num">E2E</div><div class="stat-lbl">Encrypted</div></div>
+                <div class="stat-box"><div class="stat-num">24/7</div><div class="stat-lbl">Online</div></div>
+            </div>
+        </div>
+        <div class="illus-card">
+            <div class="feature-list">
+                <div class="feature-item">
+                    <div class="feature-icon" style="background:rgba(16,185,129,0.12);color:#34d399;"><i class="fas fa-check-double"></i></div>
+                    Real-time read receipts
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon" style="background:rgba(59,130,246,0.12);color:#60a5fa;"><i class="fas fa-bolt"></i></div>
+                    Instant message delivery
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon" style="background:rgba(139,92,246,0.12);color:#a78bfa;"><i class="fas fa-shield-alt"></i></div>
+                    End-to-end security
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right form panel -->
+    <div class="form-side">
+        <div class="card">
+            <div class="logo"><span>DashSocial</span></div>
+            <div class="tagline">Sign up to connect with your friends.</div>
+
+            {% if msg %}
+            <div id="alertBox" class="alert">{{ msg }}</div>
+            <script>setTimeout(()=>{const a=document.getElementById('alertBox');if(a){a.style.transition='opacity .4s';a.style.opacity='0';setTimeout(()=>a.remove(),400);}},4000);</script>
+            {% endif %}
+
+            <form class="form" action="{% url 'signup' %}" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="text" name="name" placeholder="Full name" required autocomplete="name">
+                </div>
+                <div class="input-group">
+                    <input type="email" name="email" placeholder="Email address" required autocomplete="email">
+                </div>
+                <div class="input-group">
+                    <input type="tel" name="mobile" placeholder="Mobile number" maxlength="10">
+                </div>
+                <div class="input-group">
+                    <input type="password" name="password" placeholder="Password" required autocomplete="new-password">
+                </div>
+                <div class="input-group">
+                    <input type="password" name="cpassword" placeholder="Confirm password" required autocomplete="new-password">
+                </div>
+                <div class="input-group">
+                    <input type="file" name="profile_image" accept="image/*">
+                </div>
+                <button type="submit" class="btn1">Create Account</button>
+                <button type="button" class="submit-btn-bck" onclick="window.history.back()">Back</button>
+
+                <div class="divider"><div class="divider-line"></div><div class="divider-text">OR</div><div class="divider-line"></div></div>
+                <div class="meta-links"><a href="#"><span>📘</span> Continue with Facebook</a></div>
+                <div id="signupMessage" class="message" style="display:none;"></div>
+            </form>
+
+            <div class="terms">By signing up, you agree to our <a href="#">Terms</a>, <a href="#">Privacy Policy</a> and <a href="#">Cookies Policy</a>.</div>
+        </div>
+
+        <div class="login-prompt">
+            <span>Already have an account?</span>
+            <a href="{% url 'login' %}">Log in</a>
+        </div>
+
+        <div class="footer">
+            <div class="footer-links">
+                <a href="#">About</a><a href="#">Help</a><a href="#">Privacy</a><a href="#">Terms</a>
+            </div>
+            <div>© 2025 DashSocial</div>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>
