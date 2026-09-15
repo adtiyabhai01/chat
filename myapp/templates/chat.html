@@ -484,7 +484,10 @@ function makePeerConnection(callId, peerId) {
         const rv = document.getElementById('remoteVideo');
         if (rv && e.streams && e.streams[0]) {
             rv.srcObject = e.streams[0];
-            if (activeCall && activeCall.type === 'video') rv.style.display = 'block';
+            if (activeCall && activeCall.type === 'video') {
+                rv.style.display = 'block';
+                try { const pr = rv.play(); if (pr) pr.catch(() => {}); } catch (err) {}
+            }
         }
     };
     pc.onconnectionstatechange = () => {
@@ -704,6 +707,8 @@ function showCallUI(mode) {
         st.textContent = c.type === 'video' ? 'Video call' : 'Voice call';
         acc.style.display = 'none'; dec.style.display = 'none'; hang.style.display = 'flex';
         tm.style.display = 'block';
+        // ontrack can fire BEFORE 'connected' — don't hide an attached remote stream
+        rv.style.display = (c.type === 'video' && rv.srcObject) ? 'block' : 'none';
     }
 }
 
