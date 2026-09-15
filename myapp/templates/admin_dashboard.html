@@ -11,7 +11,8 @@
         <link rel="stylesheet" href="{% static 'css/glass.css' %}">
     <link rel="stylesheet" href="{% static 'css/admin.css' %}">
 </head>
-<body>
+<body class="rail-pad">
+{% include 'partials/sidebar.html' with active='admin' fixed=True %}
 <div class="container">
 
     <!-- Header -->

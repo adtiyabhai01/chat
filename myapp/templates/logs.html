@@ -10,7 +10,8 @@
         <link rel="stylesheet" href="{% static 'css/glass.css' %}">
     <link rel="stylesheet" href="{% static 'css/logs.css' %}">
 </head>
-<body>
+<body class="rail-pad">
+{% include 'partials/sidebar.html' with active='activity' fixed=True %}
 <div class="dashboard-container">
     <div class="header">
         <div class="header-top">

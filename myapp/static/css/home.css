@@ -174,11 +174,7 @@ html, body { height: 100%; overflow: hidden; }
     .tile-out { grid-column: 1 / -1; }
 }
 @media (max-width: 768px) {
-    .shell { grid-template-columns: 1fr; grid-template-rows: 58px 1fr; }
-    .sidebar { flex-direction: row; height: 58px; width: 100%; border-right: none; border-bottom: 1px solid var(--stroke); padding: 0 14px; gap: 4px; overflow-x: auto; }
-    .logo-mark { margin-bottom: 0; margin-right: 8px; }
-    .nav-spacer { display: none; }
-    .nav-btn .tip { display: none; }
+    .shell { grid-template-columns: 1fr; }
     .main { grid-template-rows: 52px 1fr; }
 }
 @media (max-width: 520px) {

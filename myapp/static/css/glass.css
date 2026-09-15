@@ -161,3 +161,46 @@ body {
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- global nav rail (visible on all app screens) ---------- */
+.rail {
+    width: 72px; flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px 0; gap: 6px;
+    background: var(--glass-soft);
+    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+    border-right: 1px solid var(--stroke);
+    z-index: 400;
+}
+.rail-fixed { position: fixed; left: 0; top: 0; bottom: 0; }
+body.rail-pad { padding-left: 72px; }
+.rail-logo {
+    width: 40px; height: 40px; background: var(--accent); border-radius: 13px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 800; color: #fff; text-decoration: none;
+    margin-bottom: 18px; flex-shrink: 0;
+    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
+}
+.rail-spacer { flex: 1; }
+.rail-btn {
+    width: 44px; height: 44px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--faint); font-size: 16px; text-decoration: none;
+    position: relative; transition: background 0.2s, color 0.2s;
+}
+.rail-btn:hover { background: rgba(15, 23, 42, 0.05); color: var(--ink); }
+.rail-btn.active { background: var(--accent-soft); color: var(--accent-deep); }
+.rail-tip {
+    position: absolute; left: calc(100% + 10px);
+    background: var(--ink); color: #fff;
+    font-size: 11px; font-weight: 600;
+    padding: 5px 10px; border-radius: 8px;
+    white-space: nowrap; pointer-events: none;
+    opacity: 0; transform: translateX(-6px);
+    transition: opacity 0.15s, transform 0.15s; z-index: 500;
+}
+.rail-btn:hover .rail-tip { opacity: 1; transform: translateX(0); }
+@media (max-width: 768px) {
+    .rail { display: none; }
+    body.rail-pad { padding-left: 0; }
+}

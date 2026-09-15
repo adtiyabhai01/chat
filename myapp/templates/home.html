@@ -17,18 +17,7 @@
 
 <div class="shell">
 
-    <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="logo-mark">D</div>
-        <a href="{% url 'chat' %}" class="nav-btn"><i class="fas fa-comment-dots"></i><span class="tip">Messages</span></a>
-        <a href="{% url 'show_logs' %}" class="nav-btn"><i class="fas fa-history"></i><span class="tip">Logs</span></a>
-        <a href="#" class="nav-btn active"><i class="fas fa-home"></i><span class="tip">Home</span></a>
-        {% if request.session.is_admin %}
-        <a href="{% url 'admin_dashboard' %}" class="nav-btn"><i class="fas fa-chart-line"></i><span class="tip">Admin Panel</span></a>
-        {% endif %}
-        <div class="nav-spacer"></div>
-        <a href="{% url 'logout_view' %}" class="nav-btn"><i class="fas fa-sign-out-alt"></i><span class="tip">Sign Out</span></a>
-    </aside>
+    {% include 'partials/sidebar.html' with active='home' %}
 
     <div class="main">
         <!-- Topbar -->
