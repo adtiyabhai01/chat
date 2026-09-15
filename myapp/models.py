@@ -29,6 +29,32 @@ class Message(models.Model):
     is_read = models.BooleanField(default=False)
 
 
+class CallSignal(models.Model):
+    """WebRTC signaling message (offer/answer/ice/hangup/reject/busy).
+
+    Transport is plain HTTP polling (works on serverless hosts with no
+    WebSocket support). Media itself flows peer-to-peer via WebRTC.
+    """
+    SIGNAL_KINDS = ('offer', 'answer', 'ice', 'hangup', 'reject', 'busy')
+
+    call_id = models.CharField(max_length=64, db_index=True)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_signals')
+    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_signals')
+    kind = models.CharField(max_length=16)
+    payload = models.TextField(default='{}')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    consumed = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['timestamp']
+        indexes = [
+            models.Index(fields=['receiver', 'consumed', 'timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.kind} {self.sender.name} -> {self.receiver.name} ({self.call_id[:8]})"
+
+
 
 class UserSession(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')

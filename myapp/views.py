@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from django.views.decorators.http import require_POST
-from .models import User, Chat, Message, AppLog, UserSession
+from .models import User, Chat, Message, AppLog, UserSession, CallSignal
 from .logging_service import get_logger
 
 logger = get_logger(__name__)
@@ -448,6 +448,93 @@ def get_typing(request, user_id):
     last = _typing_store.get(key, 0)
     typing = (time.time() - last) < 3
     return JsonResponse({"typing": typing})
+
+
+# ── Voice/Video Calls (WebRTC signaling over HTTP polling) ──────────────────
+# Media flows peer-to-peer via WebRTC; only tiny signaling messages go
+# through the server, so this works on hosts without WebSocket support.
+CALL_SIGNAL_KINDS = ('offer', 'answer', 'ice', 'hangup', 'reject', 'busy')
+CALL_SIGNAL_TTL_MINUTES = 10
+CALL_MAX_PAYLOAD = 12000
+
+
+def _prune_call_signals():
+    try:
+        from django.utils import timezone
+        cutoff = timezone.now() - timedelta(minutes=CALL_SIGNAL_TTL_MINUTES)
+        CallSignal.objects.filter(timestamp__lt=cutoff).delete()
+    except Exception as e:
+        logger.error(f'Call signal prune error: {e}')
+
+
+@csrf_exempt
+def send_call_signal(request):
+    if request.method != 'POST':
+        return JsonResponse({"status": "error", "message": "POST only"}, status=405)
+    current_user_id = request.session.get('user_id')
+    if not current_user_id:
+        return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
+
+    kind = data.get('kind', '')
+    receiver_id = data.get('receiver_id')
+    call_id = str(data.get('call_id', ''))[:64]
+    payload = data.get('payload', {})
+
+    if kind not in CALL_SIGNAL_KINDS:
+        return JsonResponse({"status": "error", "message": "Bad signal kind"}, status=400)
+    if not receiver_id or not call_id or not isinstance(payload, dict):
+        return JsonResponse({"status": "error", "message": "Invalid data"}, status=400)
+    try:
+        payload_str = json.dumps(payload)
+    except Exception:
+        return JsonResponse({"status": "error", "message": "Bad payload"}, status=400)
+    if len(payload_str) > CALL_MAX_PAYLOAD:
+        return JsonResponse({"status": "error", "message": "Payload too large"}, status=400)
+
+    try:
+        sender = User.objects.get(id=current_user_id)
+        receiver = User.objects.get(id=receiver_id)
+    except User.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "User not found"}, status=404)
+
+    CallSignal.objects.create(
+        call_id=call_id, sender=sender, receiver=receiver,
+        kind=kind, payload=payload_str,
+    )
+    _prune_call_signals()
+    return JsonResponse({"status": "ok"})
+
+
+def get_call_signals(request):
+    current_user_id = request.session.get('user_id')
+    if not current_user_id:
+        return JsonResponse({"signals": []})
+    _prune_call_signals()
+    try:
+        qs = CallSignal.objects.filter(
+            receiver_id=current_user_id, consumed=False
+        ).select_related('sender').order_by('timestamp')[:50]
+        data = [
+            {
+                "id": s.id,
+                "call_id": s.call_id,
+                "kind": s.kind,
+                "sender_id": s.sender_id,
+                "sender_name": s.sender.name,
+                "payload": json.loads(s.payload or '{}'),
+                "time": s.timestamp.strftime("%H:%M:%S"),
+            }
+            for s in qs
+        ]
+        CallSignal.objects.filter(id__in=[s["id"] for s in data]).update(consumed=True)
+        return JsonResponse({"signals": data})
+    except Exception as e:
+        logger.error(f'Error fetching call signals: {e}')
+        return JsonResponse({"signals": [], "error": str(e)})
 
 
 # ── Admin Dashboard ──────────────────────────────────────────────────────────
