@@ -501,10 +501,14 @@ def send_call_signal(request):
     except User.DoesNotExist:
         return JsonResponse({"status": "error", "message": "User not found"}, status=404)
 
-    CallSignal.objects.create(
-        call_id=call_id, sender=sender, receiver=receiver,
-        kind=kind, payload=payload_str,
-    )
+    try:
+        CallSignal.objects.create(
+            call_id=call_id, sender=sender, receiver=receiver,
+            kind=kind, payload=payload_str,
+        )
+    except Exception as e:
+        logger.error(f'Call signal save failed: {e}')
+        return JsonResponse({"status": "error", "message": "Could not save signal. DB table missing?"}, status=500)
     _prune_call_signals()
     return JsonResponse({"status": "ok"})
 
