@@ -1,0 +1,36 @@
+/* Maintenance — minimal frosted glass (glass.css loaded first) */
+
+body { min-height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+body::before {
+    content: ''; position: fixed;
+    width: 560px; height: 560px;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.16), transparent 70%);
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    border-radius: 50%; pointer-events: none;
+    filter: blur(60px);
+}
+.card {
+    position: relative;
+    background: var(--glass);
+    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+    border: 1px solid var(--stroke-soft);
+    outline: 1px solid var(--stroke); outline-offset: -1px;
+    border-radius: var(--r-xl);
+    padding: 56px 46px;
+    max-width: 440px; width: 100%;
+    box-shadow: var(--shadow-lg);
+    animation: gFadeUp 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.icon { font-size: 56px; margin-bottom: 22px; animation: spin 4s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.8px; margin-bottom: 10px; color: var(--ink); }
+p { font-size: 14px; color: var(--sub); line-height: 1.7; margin-bottom: 28px; }
+.status {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 20px;
+    background: var(--warning-soft);
+    border: 1px solid rgba(217, 119, 6, 0.3);
+    border-radius: 40px; font-size: 12px; font-weight: 800; color: #b45309;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); animation: blink 1.5s infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }

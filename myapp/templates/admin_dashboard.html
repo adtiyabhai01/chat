@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,99 +8,8 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --bg: #080810; --surface: rgba(255,255,255,0.04); --border: rgba(255,255,255,0.08);
-            --text: #f0f0ff; --muted: #6b7280; --accent: #7c3aed; --accent2: #4f46e5;
-            --success: #22c55e; --warning: #f59e0b; --error: #ef4444; --info: #3b82f6;
-        }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
-        body::before, body::after { content: ''; position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
-        body::before { width: 500px; height: 500px; background: radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%); top: -100px; left: -100px; }
-        body::after { width: 400px; height: 400px; background: radial-gradient(circle, rgba(79,70,229,0.12), transparent 70%); bottom: -80px; right: -80px; }
-
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
-
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-        .header h1 { font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
-        .header-actions { display: flex; gap: 10px; }
-
-        .btn { padding: 9px 18px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 13px; display: flex; align-items: center; gap: 7px; }
-        .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
-        .btn-secondary:hover { background: rgba(255,255,255,0.07); }
-        .btn-maint-off { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
-        .btn-maint-off:hover { background: rgba(34,197,94,0.25); }
-        .btn-maint-on { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
-        .btn-maint-on:hover { background: rgba(239,68,68,0.25); }
-
-        /* Stats Grid */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }
-        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
-        .stat-card h3 { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-        .stat-value { font-size: 28px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
-        .stat-sub { font-size: 11px; color: var(--muted); }
-        .stat-online .stat-value { color: var(--success); }
-        .stat-msg .stat-value { color: var(--info); }
-        .stat-err .stat-value { color: var(--error); }
-
-        /* Section */
-        .section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 20px; }
-        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }
-        .section-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-        .section-title i { color: var(--accent); }
-
-        /* Server Health */
-        .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-        .health-item { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-        .health-label { font-size: 11px; color: var(--muted); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; }
-        .health-value { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
-        .health-bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
-        .health-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
-        .bar-green { background: var(--success); }
-        .bar-yellow { background: var(--warning); }
-        .bar-red { background: var(--error); }
-        .health-sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
-        .health-error { color: var(--error); font-size: 12px; padding: 10px; }
-
-        /* Online Users Table */
-        .data-table { width: 100%; border-collapse: collapse; }
-        .data-table th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
-        .data-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.02); font-size: 12px; }
-        .data-table tbody tr:hover { background: rgba(124,58,237,0.06); }
-
-        .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; }
-        .badge-online { background: rgba(34,197,94,0.15); color: #4ade80; }
-        .badge-offline { background: rgba(107,114,128,0.15); color: #9ca3af; }
-        .badge-mobile { background: rgba(59,130,246,0.15); color: #60a5fa; }
-        .badge-desktop { background: rgba(139,92,246,0.15); color: #c4b5fd; }
-        .badge-tablet { background: rgba(245,158,11,0.15); color: #fbbf24; }
-
-        /* Logs */
-        .filter-controls { display: flex; gap: 8px; flex-wrap: wrap; }
-        .filter-btn { padding: 6px 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px; color: var(--text); cursor: pointer; font-size: 11px; font-weight: 600; transition: all 0.2s; }
-        .filter-btn:hover, .filter-btn.active { background: rgba(124,58,237,0.2); border-color: rgba(124,58,237,0.5); color: #c4b5fd; }
-
-        .log-level { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-        .log-level.info { background: rgba(59,130,246,0.2); color: #60a5fa; }
-        .log-level.warning { background: rgba(245,158,11,0.2); color: #fbbf24; }
-        .log-level.error, .log-level.critical { background: rgba(239,68,68,0.2); color: #f87171; }
-        .log-level.debug { background: rgba(139,92,246,0.2); color: #c4b5fd; }
-        .log-time { color: var(--muted); font-family: monospace; font-size: 11px; }
-        .log-message { word-break: break-word; max-width: 500px; font-size: 12px; }
-        .log-source { display: inline-block; padding: 2px 7px; background: rgba(255,255,255,0.05); border-radius: 5px; font-size: 10px; color: var(--muted); }
-
-        .empty-state { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; }
-        .dot-online { width: 7px; height: 7px; border-radius: 50%; background: var(--success); display: inline-block; box-shadow: 0 0 6px rgba(34,197,94,0.8); animation: blink 2s infinite; }
-        .dot-offline { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-        @media(max-width:768px) {
-            .header { flex-direction: column; align-items: flex-start; gap: 12px; }
-            .data-table { font-size: 11px; }
-            .data-table th, .data-table td { padding: 8px 6px; }
-        }
-    </style>
+        <link rel="stylesheet" href="{% static 'css/glass.css' %}">
+    <link rel="stylesheet" href="{% static 'css/admin.css' %}">
 </head>
 <body>
 <div class="container">
@@ -271,7 +181,7 @@
                     const coordText = hasLoc ? `${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}` : 'N/A';
                     const viewBtn = hasLoc
                         ? `<a href="https://www.google.com/maps?q=${s.latitude},${s.longitude}" target="_blank"
-                            style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:8px;color:#60a5fa;font-size:11px;font-weight:600;text-decoration:none;margin-left:6px;">
+                            style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:rgba(79,70,229,0.09);border:1px solid rgba(79,70,229,0.28);border-radius:8px;color:#4338ca;font-size:11px;font-weight:600;text-decoration:none;margin-left:6px;">
                             <i class="fas fa-map-marker-alt"></i> View
                            </a>`
                         : '';
@@ -385,13 +295,13 @@
         document.getElementById('modalOverlay')?.remove();
         const overlay = document.createElement('div');
         overlay.id = 'modalOverlay';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.4);backdrop-filter:blur(6px);z-index:9999;display:flex;align-items:center;justify-content:center;';
         overlay.innerHTML = `
-            <div style="background:#0f0f1a;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px;max-width:420px;width:90%;box-shadow:0 25px 60px rgba(0,0,0,0.5);">
-                <div style="font-size:20px;font-weight:800;color:#f0f0ff;margin-bottom:10px;">${title}</div>
-                <div style="font-size:13px;color:#6b7280;line-height:1.6;margin-bottom:28px;">${desc}</div>
+            <div style="background:rgba(255,255,255,0.92);backdrop-filter:blur(22px);border:1px solid rgba(15,23,42,0.09);border-radius:20px;padding:32px;max-width:420px;width:90%;box-shadow:0 24px 64px rgba(15,23,42,0.16);">
+                <div style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:10px;">${title}</div>
+                <div style="font-size:13px;color:#64748b;line-height:1.6;margin-bottom:28px;">${desc}</div>
                 <div style="display:flex;gap:10px;justify-content:flex-end;">
-                    <button onclick="document.getElementById('modalOverlay').remove()" style="padding:10px 20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#f0f0ff;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>
+                    <button onclick="document.getElementById('modalOverlay').remove()" style="padding:10px 20px;background:rgba(15,23,42,0.05);border:1px solid rgba(15,23,42,0.1);border-radius:10px;color:#0f172a;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>
                     <button id="modalConfirmBtn" style="padding:10px 20px;background:${confirmColor};border:none;border-radius:10px;color:white;font-size:13px;font-weight:700;cursor:pointer;">${confirmText}</button>
                 </div>
             </div>`;
