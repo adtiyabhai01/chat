@@ -86,3 +86,49 @@ body {
 @media (max-width: 450px) {
     .ig-card { padding: 24px 20px; }
 }
+
+/* ---------- signup wizard ---------- */
+.steps { display: flex; align-items: flex-start; justify-content: center; margin: 4px 0 20px; }
+.step-dot { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 56px; }
+.step-dot span {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #eef0f7; color: #94a3b8;
+    font-size: 12px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s, color 0.2s;
+}
+.step-dot label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+.step-dot.active span { background: #4f46e5; color: #fff; box-shadow: 0 3px 10px rgba(79, 70, 229, 0.35); }
+.step-dot.active label { color: #4f46e5; }
+.step-line { flex: 1; max-width: 46px; height: 2px; background: #e6e9f2; border-radius: 2px; margin-top: 12px; }
+
+.step-pane { display: none; }
+.step-pane.active { display: block; animation: paneIn 0.25s ease-out; }
+@keyframes paneIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+
+.field-err { min-height: 16px; font-size: 12px; font-weight: 600; color: #dc2626; margin: 2px 0 6px; }
+
+.row-2 { display: flex; gap: 10px; }
+.row-2 .ig-btn { flex: 1; }
+.ig-btn-soft { background: #eef0f7; color: #0f172a; box-shadow: none; }
+.ig-btn-soft:hover { background: #e2e6f5; }
+
+.pw-wrap { position: relative; }
+.pw-wrap .ig-input { padding-right: 42px; }
+.pw-eye {
+    position: absolute; right: 6px; top: 6px;
+    width: 32px; height: 32px; border: none; border-radius: 8px;
+    background: transparent; color: #94a3b8; font-size: 14px; cursor: pointer;
+}
+.pw-eye:hover { color: #4f46e5; background: rgba(79, 70, 229, 0.08); }
+
+.pw-meter { height: 4px; background: #eef0f7; border-radius: 4px; overflow: hidden; margin: 2px 0 6px; }
+.pw-meter div { height: 100%; width: 0; border-radius: 4px; transition: width 0.25s, background 0.25s; }
+.pw-hint { font-size: 11px; color: #94a3b8; margin-bottom: 8px; }
+
+.link-skip {
+    display: block; width: 100%; margin-top: 10px;
+    background: none; border: none; cursor: pointer;
+    font-family: inherit; font-size: 13px; font-weight: 600; color: #64748b;
+}
+.link-skip:hover { color: #4f46e5; text-decoration: underline; }

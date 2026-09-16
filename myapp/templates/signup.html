@@ -7,6 +7,7 @@
     <title>Sign up — DashSocial</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{% static 'css/signup.css' %}">
 </head>
 <body>
@@ -14,24 +15,61 @@
 
     <div class="ig-card">
         <h1 class="ig-brand">Dash<span>Social</span></h1>
-        <p class="ig-tag">Create your account and start the conversation.</p>
 
         {% if msg %}
         <div class="ig-alert">{{ msg }}</div>
         {% endif %}
 
-        <form action="{% url 'signup' %}" method="post" enctype="multipart/form-data">
+        <!-- Step indicator -->
+        <div class="steps" id="stepsBar">
+            <div class="step-dot active" data-step="1"><span>1</span><label>Account</label></div>
+            <div class="step-line"></div>
+            <div class="step-dot" data-step="2"><span>2</span><label>Password</label></div>
+            <div class="step-line"></div>
+            <div class="step-dot" data-step="3"><span>3</span><label>Profile</label></div>
+        </div>
+
+        <form id="signupForm" action="{% url 'signup' %}" method="post" enctype="multipart/form-data" novalidate>
             {% csrf_token %}
-            <input class="ig-input" type="text" name="name" placeholder="Full name" required autocomplete="name">
-            <input class="ig-input" type="email" name="email" placeholder="Email address" required autocomplete="email">
-            <input class="ig-input" type="tel" name="mobile" placeholder="Mobile number" maxlength="10">
-            <input class="ig-input" type="password" name="password" placeholder="Password" required autocomplete="new-password">
-            <input class="ig-input" type="password" name="cpassword" placeholder="Confirm password" required autocomplete="new-password">
-            <label class="ig-file">
-                <span id="fileLabel">Add profile photo (optional)</span>
-                <input type="file" name="profile_image" accept="image/*" hidden onchange="document.getElementById('fileLabel').textContent = this.files[0] ? this.files[0].name : 'Add profile photo (optional)'">
-            </label>
-            <button class="ig-btn" type="submit">Sign up</button>
+
+            <!-- STEP 1 : name + email -->
+            <div class="step-pane active" data-pane="1">
+                <input class="ig-input" type="text" name="name" id="fName" placeholder="Full name" autocomplete="name">
+                <input class="ig-input" type="email" name="email" id="fEmail" placeholder="Email address" autocomplete="email">
+                <p class="field-err" id="err1"></p>
+                <button class="ig-btn" type="button" onclick="goStep(2)">Continue</button>
+            </div>
+
+            <!-- STEP 2 : password -->
+            <div class="step-pane" data-pane="2">
+                <div class="pw-wrap">
+                    <input class="ig-input" type="password" name="password" id="fPass" placeholder="Create password" autocomplete="new-password">
+                    <button type="button" class="pw-eye" onclick="togglePw()" title="Show / hide">
+                        <i class="fas fa-eye" id="pwEyeIcon"></i>
+                    </button>
+                </div>
+                <div class="pw-meter"><div id="pwBar"></div></div>
+                <p class="pw-hint" id="pwHint">Use 6+ characters for a strong password.</p>
+                <p class="field-err" id="err2"></p>
+                <div class="row-2">
+                    <button class="ig-btn ig-btn-soft" type="button" onclick="goStep(1)">Back</button>
+                    <button class="ig-btn" type="button" onclick="goStep(3)">Continue</button>
+                </div>
+            </div>
+
+            <!-- STEP 3 : optional profile -->
+            <div class="step-pane" data-pane="3">
+                <input class="ig-input" type="tel" name="mobile" placeholder="Mobile number (optional)" maxlength="10" inputmode="numeric">
+                <label class="ig-file">
+                    <span id="fileLabel">Add profile photo (optional)</span>
+                    <input type="file" name="profile_image" accept="image/*" hidden onchange="document.getElementById('fileLabel').textContent = this.files[0] ? this.files[0].name : 'Add profile photo (optional)'">
+                </label>
+                <div class="row-2">
+                    <button class="ig-btn ig-btn-soft" type="button" onclick="goStep(2)">Back</button>
+                    <button class="ig-btn" type="submit">Create account</button>
+                </div>
+                <button class="link-skip" type="submit">Skip for now</button>
+            </div>
         </form>
 
         <p class="ig-terms">By signing up, you agree to our Terms, Privacy Policy and Cookies Policy.</p>
@@ -43,5 +81,69 @@
 
     <p class="ig-foot">© 2026 DashSocial</p>
 </main>
+<script>
+let curStep = 1;
+
+function goStep(n) {
+    // validate current step before moving forward
+    if (n > curStep && !validStep(curStep)) return;
+    curStep = n;
+    document.querySelectorAll('.step-pane').forEach(p =>
+        p.classList.toggle('active', p.dataset.pane == n));
+    document.querySelectorAll('.step-dot').forEach(d =>
+        d.classList.toggle('active', +d.dataset.step <= n));
+    const first = document.querySelector(`.step-pane[data-pane="${n}"] .ig-input`);
+    if (first) first.focus();
+}
+
+function validStep(n) {
+    if (n === 1) {
+        const name = document.getElementById('fName').value.trim();
+        const email = document.getElementById('fEmail').value.trim();
+        const err = document.getElementById('err1');
+        if (!name) { err.textContent = 'Please enter your name.'; return false; }
+        if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+            err.textContent = 'Please enter a valid email address.'; return false;
+        }
+        err.textContent = '';
+        return true;
+    }
+    if (n === 2) {
+        const pw = document.getElementById('fPass').value;
+        const err = document.getElementById('err2');
+        if (!pw) { err.textContent = 'Please create a password.'; return false; }
+        err.textContent = '';
+        return true;
+    }
+    return true;
+}
+
+function togglePw() {
+    const inp = document.getElementById('fPass');
+    const icon = document.getElementById('pwEyeIcon');
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    icon.className = show ? 'fas fa-eye-slash' : 'fas fa-eye';
+}
+
+// live strength hint (informational only)
+document.getElementById('fPass').addEventListener('input', function () {
+    const v = this.value;
+    let score = 0;
+    if (v.length >= 6) score++;
+    if (v.length >= 10) score++;
+    if (/[A-Z]/.test(v) && /[a-z]/.test(v)) score++;
+    if (/\d/.test(v)) score++;
+    if (/[^A-Za-z0-9]/.test(v)) score++;
+    const pct = Math.min(score, 4) / 4 * 100;
+    const bar = document.getElementById('pwBar');
+    bar.style.width = pct + '%';
+    bar.style.background = pct < 50 ? '#dc2626' : pct < 75 ? '#d97706' : '#059669';
+    document.getElementById('pwHint').textContent =
+        !v ? 'Use 6+ characters for a strong password.' :
+        pct < 50 ? 'Weak — try adding numbers or symbols.' :
+        pct < 75 ? 'Good — almost there.' : 'Strong password.';
+});
+</script>
 </body>
 </html>

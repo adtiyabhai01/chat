@@ -83,7 +83,7 @@ def signup(request):
             logger.warning(f'Signup attempt with existing email: {email}')
             return render(request, 'signup.html', {'msg': "Email already exists"})
 
-        if password != cpassword:
+        if cpassword and password != cpassword:
             return render(request, 'signup.html', {'msg': "Password and Confirm Password do not match"})
 
         try:
@@ -112,13 +112,50 @@ def signup(request):
             logger.error(f'Signup failed for {email}: {str(e)}')
             return render(request, 'signup.html', {'msg': f"Account creation failed: {str(e)}"})
 
-        return render(request, 'login.html', {'msg': "Sign Up Done"})
+        # Auto-login: take the user straight into the app, no second login needed
+        _track_login_session(request, user)
+        return redirect('home')
 
     return render(request, 'signup.html')
 
 
 def signup_desh(request):
     return render(request, 'signup_desh.html')
+
+
+def _track_login_session(request, user):
+    """Shared login bookkeeping: session keys + device tracking. Used by login & signup."""
+    request.session['email'] = user.email
+    request.session['profile'] = user.profile_image.url if user.profile_image else ''
+    request.session['is_logged_in'] = True
+    request.session['user_id'] = user.id
+    request.session['is_admin'] = (user.email.strip().lower() == getattr(settings, 'ADMIN_EMAIL', ''))
+    # Track session & device info
+    ua = request.META.get('HTTP_USER_AGENT', '')
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
+    if ip and ',' in ip:
+        ip = ip.split(',')[0].strip()
+    device_type = 'mobile' if any(x in ua.lower() for x in ['mobile', 'android', 'iphone']) else \
+                  'tablet' if 'tablet' in ua.lower() or 'ipad' in ua.lower() else 'desktop'
+    browser = 'Chrome' if 'Chrome' in ua else 'Firefox' if 'Firefox' in ua else \
+              'Safari' if 'Safari' in ua else 'Edge' if 'Edg' in ua else 'Other'
+    os_name = 'Android' if 'Android' in ua else 'iOS' if 'iPhone' in ua or 'iPad' in ua else \
+              'Windows' if 'Windows' in ua else 'Mac' if 'Mac' in ua else \
+              'Linux' if 'Linux' in ua else 'Other'
+    try:
+        UserSession.objects.filter(user=user).update(is_online=False)
+        UserSession.objects.create(
+            user=user,
+            session_key=request.session.session_key or '',
+            ip_address=ip or None,
+            user_agent=ua[:500],
+            device_type=device_type,
+            browser=browser,
+            os=os_name,
+            is_online=True
+        )
+    except Exception as e:
+        logger.error(f'Session tracking error: {e}')
 
 
 @csrf_exempt
@@ -131,38 +168,8 @@ def login(request):
             user = User.objects.get(email=email)
 
             if user.password == password:
-                request.session['email'] = user.email
-                request.session['profile'] = user.profile_image.url if user.profile_image else ''
-                request.session['is_logged_in'] = True
-                request.session['user_id'] = user.id
-                request.session['is_admin'] = (user.email.strip().lower() == getattr(settings, 'ADMIN_EMAIL', ''))
+                _track_login_session(request, user)
                 logger.info(f'User login successful: {user.name} ({email})')
-                # Track session & device info
-                ua = request.META.get('HTTP_USER_AGENT', '')
-                ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
-                if ip and ',' in ip:
-                    ip = ip.split(',')[0].strip()
-                device_type = 'mobile' if any(x in ua.lower() for x in ['mobile', 'android', 'iphone']) else \
-                              'tablet' if 'tablet' in ua.lower() or 'ipad' in ua.lower() else 'desktop'
-                browser = 'Chrome' if 'Chrome' in ua else 'Firefox' if 'Firefox' in ua else \
-                          'Safari' if 'Safari' in ua else 'Edge' if 'Edg' in ua else 'Other'
-                os_name = 'Android' if 'Android' in ua else 'iOS' if 'iPhone' in ua or 'iPad' in ua else \
-                          'Windows' if 'Windows' in ua else 'Mac' if 'Mac' in ua else \
-                          'Linux' if 'Linux' in ua else 'Other'
-                try:
-                    UserSession.objects.filter(user=user).update(is_online=False)
-                    UserSession.objects.create(
-                        user=user,
-                        session_key=request.session.session_key or '',
-                        ip_address=ip or None,
-                        user_agent=ua[:500],
-                        device_type=device_type,
-                        browser=browser,
-                        os=os_name,
-                        is_online=True
-                    )
-                except Exception as e:
-                    logger.error(f'Session tracking error: {e}')
                 return redirect('home')
 
             logger.warning(f'Failed login - wrong password for: {email}')
