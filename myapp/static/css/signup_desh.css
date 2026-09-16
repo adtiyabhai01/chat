@@ -3,7 +3,8 @@
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #fafafa; color: #262626;
+    background: linear-gradient(160deg, #f8fafc 0%, #eef2ff 60%, #f5f3ff 100%);
+    background-attachment: fixed; color: #0f172a;
     min-height: 100vh; min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
 }
@@ -18,42 +19,45 @@ body {
 
 .ig-card {
     width: 100%;
-    background: #fff;
-    border: 1px solid #dbdbdb; border-radius: 3px;
-    padding: 44px 34px 36px; margin-bottom: 14px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #e5e9f2; border-radius: 20px;
+    padding: 42px 32px 34px; margin-bottom: 14px;
     text-align: center;
+    box-shadow: 0 12px 40px rgba(79, 70, 229, 0.08);
 }
 
 .ig-brand {
-    font-family: 'Grand Hotel', cursive; font-weight: 400;
-    color: #262626; line-height: 1;
+    font-weight: 800;
+    color: #0f172a; line-height: 1; letter-spacing: -1px;
 }
-.ig-brand-lg { font-size: 52px; margin-bottom: 10px; }
+.ig-brand span { color: #4f46e5; }
+.ig-brand-lg { font-size: 34px; margin-bottom: 10px; }
 
-.ig-tag { color: #737373; font-size: 14px; line-height: 1.5; margin-bottom: 22px; }
+.ig-tag { color: #64748b; font-size: 14px; line-height: 1.6; margin-bottom: 22px; }
 
 .ig-btn {
     display: block; width: 100%;
-    background: #0095f6; color: #fff;
-    border: none; border-radius: 8px;
-    padding: 9px; margin-top: 6px;
-    font-size: 14px; font-weight: 600; font-family: inherit;
+    background: #4f46e5; color: #fff;
+    border: none; border-radius: 10px;
+    padding: 11px; margin-top: 6px;
+    font-size: 14px; font-weight: 700; font-family: inherit;
     cursor: pointer; text-decoration: none; text-align: center;
+    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.28);
+    transition: background 0.2s, transform 0.2s;
 }
-.ig-btn:hover { background: #1877f2; }
-.ig-btn-ghost { background: transparent; color: #0095f6; border: 1px solid #dbdbdb; }
-.ig-btn-ghost:hover { background: #fafafa; }
+.ig-btn:hover { background: #4338ca; transform: translateY(-1px); }
+.ig-btn-ghost { background: #fff; color: #4f46e5; border: 1px solid #c7cdf5; box-shadow: none; }
+.ig-btn-ghost:hover { background: rgba(79, 70, 229, 0.06); }
 
 .ig-or { display: flex; align-items: center; gap: 14px; margin: 18px 0; }
-.ig-or span { flex: 1; height: 1px; background: #dbdbdb; }
-.ig-or { font-size: 12px; font-weight: 600; color: #8e8e8e; }
+.ig-or span { flex: 1; height: 1px; background: #e2e6f0; }
+.ig-or { font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 0.6px; }
 
-.ig-points { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8e8e8e; margin-bottom: 6px; }
-.ig-points i { font-style: normal; color: #dbdbdb; }
+.ig-points { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: #64748b; margin-bottom: 6px; }
+.ig-points i { font-style: normal; color: #c7cdf5; }
 
-.ig-foot { margin-top: 14px; font-size: 11px; color: #8e8e8e; text-align: center; }
+.ig-foot { margin-top: 14px; font-size: 11px; color: #94a3b8; text-align: center; }
 
 @media (max-width: 450px) {
-    body { background: #fff; }
-    .ig-card { border: none; padding: 32px 8px; }
+    .ig-card { padding: 32px 22px; }
 }

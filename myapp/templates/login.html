@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log in — DashSocial</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
-    <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/login.css' %}">
 </head>
 <body>
@@ -17,7 +17,7 @@
     {% endif %}
 
     <div class="ig-card">
-        <h1 class="ig-brand">DashSocial</h1>
+        <h1 class="ig-brand">Dash<span>Social</span></h1>
         <form action="{% url 'login' %}" method="post">
             {% csrf_token %}
             <input class="ig-input" type="email" name="email" placeholder="Email address" required autocomplete="email">
