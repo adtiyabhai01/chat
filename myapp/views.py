@@ -57,14 +57,43 @@ def index(request):
 def home(request):
     user = None
     email = request.session.get('email')
+    stats = {'unread': 0, 'today': 0, 'total': 0}
+    recent_chats = []
 
     if email:
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             request.session.flush()
+            user = None
 
-    return render(request, 'home.html', {'user': user})
+    if user:
+        try:
+            from django.utils import timezone
+            mine = Message.objects.filter(Q(sender=user) | Q(receiver=user))
+            stats['unread'] = mine.filter(receiver=user, is_read=False).count()
+            stats['today'] = mine.filter(timestamp__date=timezone.now().date()).count()
+            stats['total'] = mine.count()
+            latest = mine.select_related('sender', 'receiver').order_by('-timestamp')[:60]
+            seen = {}
+            for m in latest:
+                other = m.receiver if m.sender_id == user.id else m.sender
+                if other.id not in seen:
+                    seen[other.id] = {
+                        'id': other.id,
+                        'name': other.name,
+                        'avatar': other.profile_image.url if other.profile_image else '',
+                        'last_text': m.text,
+                        'time': m.timestamp.strftime('%H:%M'),
+                        'unread': mine.filter(sender=other, receiver=user, is_read=False).count(),
+                    }
+                if len(seen) >= 5:
+                    break
+            recent_chats = list(seen.values())
+        except Exception as e:
+            logger.error(f'Home stats error: {e}')
+
+    return render(request, 'home.html', {'user': user, 'stats': stats, 'recent_chats': recent_chats})
 
 
 def signup(request):

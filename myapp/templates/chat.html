@@ -168,6 +168,13 @@
         setupMobileUI();
         loadUnreadBadges();
         setInterval(loadUnreadBadges, 5000);
+
+        // Deep link from home: /chat/?open=<user_id> auto-opens that conversation
+        const openId = new URLSearchParams(window.location.search).get('open');
+        if (openId) {
+            const item = document.getElementById(`badge-${openId}`)?.closest('.chat-item');
+            if (item) item.click();
+        }
     });
 
     function handleTypingInput() {

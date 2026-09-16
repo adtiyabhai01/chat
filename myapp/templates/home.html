@@ -38,7 +38,7 @@
                         <div class="hero-left">
                             <div class="tag"><span id="greetEmoji">👋</span><span id="greetText">Welcome back</span></div>
                             <div class="hero-name">{{ user.name }}</div>
-                            <div class="hero-sub">Everything's running smoothly — your messages and activity are ready.</div>
+                            <div class="hero-sub">{% if stats.unread %}You have {{ stats.unread }} unread message{{ stats.unread|pluralize }} — tap a chat below to catch up.{% else %}Everything's running smoothly — your messages and activity are ready.{% endif %}</div>
                         </div>
                         <div class="av-wrap">
                             {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="Profile">{% else %}<i class="fas fa-user"></i>{% endif %}
@@ -72,6 +72,46 @@
                             <div><div class="tile-label">Sign Out</div><div class="tile-desc">End your session safely</div></div>
                             <i class="fas fa-arrow-up-right tile-arrow"></i>
                         </a>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="section-label">At a Glance</div>
+                    <div class="stats-row">
+                        <div class="stat-mini">
+                            <div class="stat-mini-num accent">{{ stats.unread }}</div>
+                            <div class="stat-mini-lbl">Unread</div>
+                        </div>
+                        <div class="stat-mini">
+                            <div class="stat-mini-num">{{ stats.today }}</div>
+                            <div class="stat-mini-lbl">Today</div>
+                        </div>
+                        <div class="stat-mini">
+                            <div class="stat-mini-num">{{ stats.total }}</div>
+                            <div class="stat-mini-lbl">Messages</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="section-label">Recent Chats <a href="{% url 'chat' %}" class="section-link">Open all →</a></div>
+                    <div class="recent-list">
+                        {% for c in recent_chats %}
+                        <a href="{% url 'chat' %}?open={{ c.id }}" class="recent-item">
+                            {% if c.avatar %}
+                            <img src="{{ c.avatar }}" class="recent-av" alt="{{ c.name }}">
+                            {% else %}
+                            <div class="recent-av recent-initial">{{ c.name|slice:":1" }}</div>
+                            {% endif %}
+                            <div class="recent-mid">
+                                <div class="recent-name">{{ c.name }}{% if c.unread %}<span class="recent-unread">{{ c.unread }}</span>{% endif %}</div>
+                                <div class="recent-text">{{ c.last_text|truncatechars:60 }}</div>
+                            </div>
+                            <div class="recent-time">{{ c.time }}</div>
+                        </a>
+                        {% empty %}
+                        <div class="recent-empty">No conversations yet — <a href="{% url 'chat' %}">start one</a>.</div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>
