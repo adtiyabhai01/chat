@@ -55,11 +55,6 @@
                             <div><div class="tile-label">Messages</div><div class="tile-desc">Open your conversations</div></div>
                             <i class="fas fa-arrow-up-right tile-arrow"></i>
                         </a>
-                        <a href="{% url 'show_logs' %}" class="tile tile-logs">
-                            <div class="tile-icon"><i class="fas fa-history"></i></div>
-                            <div><div class="tile-label">Activity</div><div class="tile-desc">View your recent logs</div></div>
-                            <i class="fas fa-arrow-up-right tile-arrow"></i>
-                        </a>
                         {% if request.session.is_admin %}
                         <a href="{% url 'admin_dashboard' %}" class="tile" style="border-color:rgba(139,92,246,0.25);">
                             <div class="tile-icon" style="background:rgba(139,92,246,0.12);color:#a78bfa;"><i class="fas fa-chart-line"></i></div>

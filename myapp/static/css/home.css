@@ -106,7 +106,7 @@ html, body { height: 100%; overflow: hidden; }
     border-radius: 50%; border: 3px solid #fff;
 }
 
-.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .tile {
     background: var(--glass);
     backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
