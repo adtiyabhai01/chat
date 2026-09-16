@@ -1,146 +1,84 @@
-/* Sign up — minimal frosted glass (glass.css loaded first) */
+/* Instagram-style signup — self-contained (no glass.css dependency) */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #fafafa; color: #262626;
     min-height: 100vh; min-height: 100dvh;
-    display: flex; align-items: center; justify-content: center;
+    -webkit-font-smoothing: antialiased;
+}
+
+.ig-wrap {
+    min-height: 100vh; min-height: 100dvh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
     padding: 24px 16px;
-    overflow-x: hidden;
+    max-width: 350px; margin: 0 auto; width: 100%;
 }
 
-body::before {
-    content: ''; position: fixed; border-radius: 50%;
-    filter: blur(110px); pointer-events: none; z-index: 0;
-    width: 560px; height: 560px;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.2), transparent 70%);
-    top: -180px; left: -180px;
+.ig-card {
+    width: 100%;
+    background: #fff;
+    border: 1px solid #dbdbdb; border-radius: 3px;
+    padding: 32px 30px 26px; margin-bottom: 10px;
 }
 
-.container {
-    position: relative; z-index: 1;
-    width: 100%; max-width: 920px;
-    display: flex; align-items: center; justify-content: center;
-    gap: 40px;
+.ig-brand {
+    font-family: 'Grand Hotel', cursive; font-weight: 400;
+    font-size: 44px; text-align: center; color: #262626;
+    margin-bottom: 6px; line-height: 1;
 }
 
-/* Left panel */
-.illus { flex: 1; min-width: 260px; max-width: 330px; display: flex; flex-direction: column; gap: 14px; }
-.illus-card {
-    background: var(--glass);
-    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
-    border: 1px solid var(--stroke-soft);
-    outline: 1px solid var(--stroke); outline-offset: -1px;
-    border-radius: var(--r-lg); padding: 22px;
-    box-shadow: var(--shadow);
-    animation: gFadeUp 0.45s cubic-bezier(0.4, 0, 0.2, 1) backwards;
-}
-.illus-card:nth-child(2) { animation-delay: 0.08s; }
-.illus-card:nth-child(3) { animation-delay: 0.16s; }
-
-.illus-brand { font-size: 1.6rem; font-weight: 800; letter-spacing: -1px; color: var(--ink); margin-bottom: 6px; }
-.illus-tagline { font-size: 13px; color: var(--sub); line-height: 1.6; }
-
-.illus-stats { display: flex; gap: 10px; }
-.stat-box { flex: 1; background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--r-md); padding: 12px 8px; text-align: center; }
-.stat-num { font-size: 1.25rem; font-weight: 800; color: var(--accent-deep); letter-spacing: -0.5px; }
-.stat-lbl { font-size: 9px; color: var(--sub); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; }
-
-.feature-list { display: flex; flex-direction: column; gap: 10px; }
-.feature-item { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--sub); font-weight: 500; }
-.feature-icon { width: 30px; height: 30px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
-
-/* Right form */
-.form-side { flex: 1; max-width: 400px; width: 100%; }
-
-.card {
-    background: var(--glass);
-    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
-    border: 1px solid var(--stroke-soft);
-    outline: 1px solid var(--stroke); outline-offset: -1px;
-    border-radius: var(--r-xl);
-    padding: 34px 30px 26px;
-    box-shadow: var(--shadow-lg);
-    margin-bottom: 12px;
-    animation: gFadeUp 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+.ig-tag {
+    text-align: center; color: #737373;
+    font-size: 15px; font-weight: 600; line-height: 1.4;
+    margin-bottom: 16px;
 }
 
-.logo { text-align: center; margin-bottom: 4px; font-size: 1.9rem; font-weight: 800; letter-spacing: -1px; color: var(--ink); }
-.tagline { text-align: center; font-size: 13px; color: var(--sub); margin-bottom: 20px; }
-
-.form { display: flex; flex-direction: column; gap: 10px; }
-
-.input-group input {
-    width: 100%; padding: 12px 14px;
-    background: rgba(255, 255, 255, 0.7); border: 1px solid var(--stroke);
-    border-radius: 12px; color: var(--ink);
-    font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+.ig-input {
+    width: 100%;
+    background: #fafafa; border: 1px solid #dbdbdb; border-radius: 3px;
+    padding: 10px 10px; font-size: 12px; font-family: inherit; color: #262626;
+    margin-bottom: 7px; outline: none;
 }
-.input-group input::placeholder { color: var(--faint); }
-.input-group input:focus { background: #fff; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ig-input::placeholder { color: #8e8e8e; }
+.ig-input:focus { border-color: #a8a8a8; }
 
-.input-group input[type="file"] { color: var(--sub); font-size: 12px; cursor: pointer; }
-.input-group input[type="file"]::-webkit-file-upload-button {
-    background: var(--accent-soft); border: 1px solid var(--accent-line);
-    color: var(--accent-deep); padding: 6px 12px; border-radius: 8px;
-    font-size: 12px; font-weight: 700; cursor: pointer; margin-right: 10px;
+.ig-file {
+    display: block; width: 100%;
+    border: 1px dashed #dbdbdb; border-radius: 3px;
+    padding: 10px; margin-bottom: 7px;
+    font-size: 12px; color: #737373; text-align: center;
+    cursor: pointer;
 }
-.input-group input[type="file"]::-webkit-file-upload-button:hover { background: rgba(79, 70, 229, 0.16); }
+.ig-file:hover { border-color: #a8a8a8; color: #262626; }
+.ig-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 
-.btn1 {
-    width: 100%; padding: 13px;
-    background: var(--accent);
-    color: #fff; border: none; border-radius: var(--r-md);
-    font-size: 14px; font-weight: 700; cursor: pointer;
-    margin-top: 4px; transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
-    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.28);
+.ig-btn {
+    display: block; width: 100%;
+    background: #0095f6; color: #fff;
+    border: none; border-radius: 8px;
+    padding: 8px; margin-top: 9px;
+    font-size: 14px; font-weight: 600; font-family: inherit;
+    cursor: pointer;
 }
-.btn1:hover { background: var(--accent-deep); transform: translateY(-1px); }
-.btn1:active { transform: scale(0.98); }
+.ig-btn:hover { background: #1877f2; }
 
-.submit-btn-bck {
-    background: transparent; color: var(--sub);
-    border: 1px solid var(--stroke); border-radius: 12px;
-    padding: 10px 16px; font-weight: 600; font-size: 13px;
-    cursor: pointer; width: 100%; transition: background 0.2s, color 0.2s; font-family: inherit;
+.ig-terms { font-size: 11px; color: #8e8e8e; text-align: center; line-height: 1.5; margin-top: 14px; }
+
+.ig-switch { padding: 22px; text-align: center; font-size: 14px; }
+.ig-switch a { color: #0095f6; font-weight: 600; text-decoration: none; }
+
+.ig-alert {
+    width: 100%;
+    border: 1px solid #ed4956; color: #ed4956;
+    font-size: 13px; text-align: center;
+    padding: 10px; border-radius: 3px; margin-bottom: 12px;
 }
-.submit-btn-bck:hover { background: rgba(15, 23, 42, 0.04); color: var(--ink); }
 
-.divider { display: flex; align-items: center; margin: 12px 0 6px; gap: 12px; }
-.divider-line { flex: 1; height: 1px; background: var(--stroke); }
-.divider-text { font-size: 11px; font-weight: 700; color: var(--faint); }
+.ig-foot { margin-top: 14px; font-size: 11px; color: #8e8e8e; text-align: center; }
 
-.meta-links { text-align: center; }
-.meta-links a { color: var(--accent); text-decoration: none; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
-
-.terms { text-align: center; font-size: 11px; color: var(--faint); margin-top: 16px; line-height: 1.6; }
-.terms a { color: var(--sub); text-decoration: none; font-weight: 600; }
-
-.login-prompt {
-    background: var(--glass-soft);
-    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
-    border: 1px solid var(--stroke);
-    border-radius: var(--r-md); padding: 15px 20px; text-align: center; font-size: 13px;
-    margin-bottom: 12px; box-shadow: var(--shadow);
-}
-.login-prompt span { color: var(--sub); }
-.login-prompt a { color: var(--accent); font-weight: 700; text-decoration: none; margin-left: 5px; }
-.login-prompt a:hover { text-decoration: underline; }
-
-.footer { text-align: center; font-size: 11px; color: var(--faint); }
-.footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 8px; }
-.footer-links a { color: var(--sub); text-decoration: none; }
-
-.message { font-size: 12px; text-align: center; margin-top: 8px; padding: 9px 12px; border-radius: 10px; }
-.error-msg   { color: #b91c1c; background: var(--error-soft); border: 1px solid rgba(220, 38, 38, 0.25); }
-.success-msg { color: #047857; background: var(--success-soft); border: 1px solid rgba(5, 150, 105, 0.25); }
-.alert { background: var(--error-soft); border: 1px solid rgba(220, 38, 38, 0.25); color: #b91c1c; border-radius: 12px; padding: 10px 14px; font-size: 12px; margin-top: 8px; }
-
-@media (max-width: 760px) {
-    .illus { display: none; }
-    .container { justify-content: center; }
-    .form-side { max-width: 420px; }
-}
-@media (max-width: 480px) {
-    .card { padding: 26px 20px; }
-    .logo { font-size: 1.7rem; }
-    body { padding: 16px 12px; }
+@media (max-width: 450px) {
+    body { background: #fff; }
+    .ig-card { border: none; padding: 24px 8px; }
 }

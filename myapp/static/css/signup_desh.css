@@ -1,85 +1,59 @@
-/* Welcome — minimal frosted glass (glass.css loaded first) */
+/* Instagram-style welcome — self-contained (no glass.css dependency) */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #fafafa; color: #262626;
     min-height: 100vh; min-height: 100dvh;
-    display: flex; align-items: center; justify-content: center;
-    padding: 20px; overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
 }
 
-.bg-animation { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.circle { position: absolute; border-radius: 50%; filter: blur(120px); }
-.circle-1 { width: 640px; height: 640px; background: rgba(99, 102, 241, 0.18); top: -280px; left: -200px; animation: drift 20s ease-in-out infinite; }
-.circle-2 { width: 480px; height: 480px; background: rgba(56, 189, 248, 0.16); bottom: -200px; right: -150px; animation: drift 25s ease-in-out infinite reverse; }
-.circle-3 { width: 280px; height: 280px; background: rgba(52, 211, 153, 0.14); top: 40%; left: 55%; animation: drift 18s ease-in-out infinite 3s; }
-.circle-4 { width: 180px; height: 180px; background: rgba(99, 102, 241, 0.12); bottom: 18%; right: 22%; animation: drift 22s ease-in-out infinite 6s; }
-@keyframes drift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-24px); } }
+.ig-wrap {
+    min-height: 100vh; min-height: 100dvh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 24px 16px;
+    max-width: 350px; margin: 0 auto; width: 100%;
+}
 
-.container { position: relative; z-index: 1; width: 100%; max-width: 460px; }
-
-.card {
-    background: var(--glass);
-    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
-    border: 1px solid var(--stroke-soft);
-    outline: 1px solid var(--stroke); outline-offset: -1px;
-    border-radius: 28px;
-    padding: 48px 38px 40px;
-    box-shadow: var(--shadow-lg);
-    animation: gFadeUp 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+.ig-card {
+    width: 100%;
+    background: #fff;
+    border: 1px solid #dbdbdb; border-radius: 3px;
+    padding: 44px 34px 36px; margin-bottom: 14px;
     text-align: center;
 }
 
-.logo-wrapper { position: relative; display: inline-block; margin-bottom: 24px; }
-.logo { font-size: 2.6rem; font-weight: 800; letter-spacing: -2px; color: var(--ink); }
-.logo-badge {
-    position: absolute; top: 2px; right: -14px;
-    width: 12px; height: 12px;
-    background: var(--success);
-    border-radius: 50%; border: 2px solid #fff;
-    box-shadow: 0 0 10px rgba(5, 150, 105, 0.5);
-    animation: pulse 2s ease-in-out infinite;
+.ig-brand {
+    font-family: 'Grand Hotel', cursive; font-weight: 400;
+    color: #262626; line-height: 1;
 }
-@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.25); opacity: 1; } }
+.ig-brand-lg { font-size: 52px; margin-bottom: 10px; }
 
-.welcome-text { margin-bottom: 30px; }
-.welcome-text h2 { font-size: 1.45rem; font-weight: 800; color: var(--ink); margin-bottom: 8px; letter-spacing: -0.5px; }
-.welcome-text p { font-size: 14px; color: var(--sub); line-height: 1.6; }
+.ig-tag { color: #737373; font-size: 14px; line-height: 1.5; margin-bottom: 22px; }
 
-.divider { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
-.divider-line { flex: 1; height: 1px; background: var(--stroke); }
-.divider-text { font-size: 11px; font-weight: 700; color: var(--faint); letter-spacing: 0.6px; text-transform: uppercase; }
-
-.social-login { display: flex; gap: 12px; }
-.social-btn {
-    flex: 1; padding: 13px 16px;
-    border-radius: var(--r-md); font-size: 14px; font-weight: 700;
-    cursor: pointer; transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
-    display: flex; align-items: center; justify-content: center;
-    text-decoration: none;
+.ig-btn {
+    display: block; width: 100%;
+    background: #0095f6; color: #fff;
+    border: none; border-radius: 8px;
+    padding: 9px; margin-top: 6px;
+    font-size: 14px; font-weight: 600; font-family: inherit;
+    cursor: pointer; text-decoration: none; text-align: center;
 }
-.social-btn.google { background: var(--accent); color: #fff; box-shadow: 0 6px 20px rgba(79, 70, 229, 0.28); }
-.social-btn.google:hover { background: var(--accent-deep); transform: translateY(-1px); }
-.social-btn.google:active { transform: scale(0.98); }
-.social-btn.facebook { background: rgba(255, 255, 255, 0.7); color: var(--ink); border: 1px solid var(--stroke); }
-.social-btn.facebook:hover { background: #fff; transform: translateY(-1px); }
-.social-btn.facebook:active { transform: scale(0.98); }
+.ig-btn:hover { background: #1877f2; }
+.ig-btn-ghost { background: transparent; color: #0095f6; border: 1px solid #dbdbdb; }
+.ig-btn-ghost:hover { background: #fafafa; }
 
-.features { display: flex; justify-content: center; gap: 22px; margin-top: 30px; padding-top: 24px; border-top: 1px solid var(--stroke); }
-.feat { display: flex; flex-direction: column; align-items: center; gap: 7px; }
-.feat-icon { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-.feat-lbl { font-size: 10px; color: var(--sub); font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; }
+.ig-or { display: flex; align-items: center; gap: 14px; margin: 18px 0; }
+.ig-or span { flex: 1; height: 1px; background: #dbdbdb; }
+.ig-or { font-size: 12px; font-weight: 600; color: #8e8e8e; }
 
-.message-container { margin-top: 16px; padding: 11px 14px; border-radius: 12px; font-size: 13px; }
-.error-msg   { color: #b91c1c; background: var(--error-soft); border: 1px solid rgba(220, 38, 38, 0.25); }
-.success-msg { color: #047857; background: var(--success-soft); border: 1px solid rgba(5, 150, 105, 0.25); }
+.ig-points { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8e8e8e; margin-bottom: 6px; }
+.ig-points i { font-style: normal; color: #dbdbdb; }
 
-.footer-note { text-align: center; margin-top: 20px; font-size: 11px; color: var(--faint); }
+.ig-foot { margin-top: 14px; font-size: 11px; color: #8e8e8e; text-align: center; }
 
-@media (max-width: 520px) {
-    .card { padding: 36px 24px 32px; }
-    .logo { font-size: 2.2rem; }
-    .welcome-text h2 { font-size: 1.3rem; }
-    .features { gap: 14px; }
-}
-@media (max-width: 360px) {
-    .social-login { flex-direction: column; }
+@media (max-width: 450px) {
+    body { background: #fff; }
+    .ig-card { border: none; padding: 32px 8px; }
 }
