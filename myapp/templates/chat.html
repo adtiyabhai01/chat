@@ -286,7 +286,7 @@
         document.getElementById('typingIndicator').classList.remove('visible');
         if (messageInput) { messageInput.disabled = false; messageInput.placeholder = `Message ${username || 'user'}…`; }
         if (messagesContainer) messagesContainer.innerHTML = '';
-        lastMessageCount = 0;
+        renderedIds = new Set(); tickById = {};
         toggleSendState();
 
         document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
@@ -317,9 +317,12 @@
         sendTypingStatus(false);
         clearTimeout(typingTimeout);
 
-        // Optimistic: show the bubble instantly instead of waiting for the poll
+        // Optimistic: show the bubble instantly with a temp id. On success the
+        // temp bubble is dropped and the next server sync paints the real one,
+        // so slow/out-of-order responses can never duplicate or lose messages.
         const nowTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-        appendMessage(message, 'sent', nowTime, false);
+        const tmpId = 'tmp-' + Date.now().toString(36) + Math.floor(Math.random() * 1e6);
+        appendMessage(message, 'sent', nowTime, false, tmpId);
         const optimistic = messagesContainer.lastElementChild;
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
         messageInput.value = '';
@@ -334,7 +337,8 @@
         .then(r => r.json())
         .then(data => {
             if (data.status === 'success') {
-                lastMessageCount++;
+                optimistic?.remove();
+                renderedIds.delete(tmpId);
                 loadMessages(currentUserId);
             } else {
                 optimistic?.remove();
@@ -348,42 +352,91 @@
         });
     };
 
-    let lastMessageCount = 0;
+    // ID-based sync: every poll reconciles against server truth, so the view
+    // converges no matter how responses race. Read ticks update live too.
+    let renderedIds = new Set();
+    let tickById = {};
+    let pollInflight = false;
+    let pollFails = 0;
+
+    function setConnPill(show) {
+        let pill = document.getElementById('connPill');
+        if (!pill) {
+            pill = document.createElement('div');
+            pill.id = 'connPill';
+            pill.className = 'conn-pill';
+            pill.textContent = 'Reconnecting…';
+            document.body.appendChild(pill);
+        }
+        pill.style.display = show ? 'block' : 'none';
+    }
 
     function loadMessages(userId) {
-        fetch(`/get-messages/${userId}/`)
-        .then(r => r.json())
+        if (pollInflight) return;   // never stack requests on a slow server
+        pollInflight = true;
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 12000);
+        fetch(`/get-messages/${userId}/`, { signal: ctrl.signal })
+        .then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
         .then(data => {
+            pollFails = 0; setConnPill(false);
             if (!messagesContainer) return;
             const messages = data.messages || data;
+            if (!Array.isArray(messages)) return;
+            const serverIds = new Set(messages.map(m => String(m.id)));
 
-            if (messages.length === lastMessageCount) return;
+            const hasTemp = [...renderedIds].some(id => id.startsWith('tmp-'));
+            if (!hasTemp) {
+                // Drop bubbles whose messages vanished server-side
+                messagesContainer.querySelectorAll('.msg-wrap').forEach(w => {
+                    const mid = w.dataset.mid || '';
+                    if (mid && !mid.startsWith('tmp-') && !serverIds.has(mid)) {
+                        w.remove();
+                        renderedIds.delete(mid);
+                        delete tickById[mid];
+                    }
+                });
+                // Shrunk list -> full rebuild to guarantee order
+                if (messages.length < renderedIds.size) {
+                    messagesContainer.innerHTML = '';
+                    renderedIds = new Set(); tickById = {};
+                }
+            }
 
             const wasAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 80;
 
-            if (messages.length < lastMessageCount) {
-                messagesContainer.innerHTML = '';
-                lastMessageCount = 0;
-            }
-
-            const newMsgs = messages.slice(lastMessageCount);
-            newMsgs.forEach(msg => {
+            messages.forEach(msg => {
+                const key = String(msg.id);
+                if (renderedIds.has(key)) {
+                    // Live-update the read tick without any refresh
+                    const tick = tickById[key];
+                    if (tick && msg.is_read && !tick.classList.contains('read')) {
+                        tick.className = 'fas fa-check-double tick read';
+                        tick.title = 'Read';
+                    }
+                    return;
+                }
                 const type = (msg.sender == CURRENT_USER_ID) ? 'sent' : 'received';
-                appendMessage(msg.message || msg.text || '', type, msg.time || '', msg.is_read);
+                appendMessage(msg.message || msg.text || '', type, msg.time || '', msg.is_read, key);
             });
-            lastMessageCount = messages.length;
 
             if (wasAtBottom) messagesContainer.scrollTop = messagesContainer.scrollHeight;
         })
-        .catch(err => console.error('Load error:', err));
+        .catch(err => {
+            if (err && err.name === 'AbortError') console.warn('Poll timeout, will retry');
+            else console.error('Load error:', err);
+            if (++pollFails >= 3) setConnPill(true);
+        })
+        .finally(() => { pollInflight = false; clearTimeout(timer); });
     }
 
-    function appendMessage(text, type, time, isRead) {
+    function appendMessage(text, type, time, isRead, mid) {
         if (!messagesContainer) return;
         messagesContainer.querySelector('.no-chat-selected')?.remove();
 
         const wrap = document.createElement('div');
         wrap.className = `msg-wrap ${type}`;
+        if (mid !== undefined && mid !== null) wrap.dataset.mid = String(mid);
 
         const bubble = document.createElement('div');
         bubble.className = `message message-${type}`;
@@ -409,10 +462,14 @@
                 tick.title = 'Sent';
             }
             meta.appendChild(tick);
+            if (mid !== undefined && mid !== null && !String(mid).startsWith('tmp-')) {
+                tickById[String(mid)] = tick;
+            }
         }
 
         wrap.appendChild(meta);
         messagesContainer.appendChild(wrap);
+        if (mid !== undefined && mid !== null) renderedIds.add(String(mid));
     }
 
     function loadUnreadBadges() {

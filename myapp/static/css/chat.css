@@ -782,3 +782,13 @@ body::before, body::after { display: none !important; content: none !important; 
   #messageInput, #searchInput { font-size: 16px; }
   .messages-container { overscroll-behavior: contain; }
 }
+
+/* reconnect indicator (shown after repeated poll failures) */
+.conn-pill {
+  display: none;
+  position: fixed; top: 74px; left: 50%; transform: translateX(-50%);
+  background: #0f172a; color: #fff;
+  font-size: 11px; font-weight: 700;
+  padding: 7px 16px; border-radius: 40px; z-index: 500;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.3);
+}
