@@ -47,6 +47,9 @@ MAINTENANCE_MODE = False
 def admin_required(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
+        # Standalone console session (/admin/) also grants API access
+        if request.session.get('admin_auth'):
+            return view_func(request, *args, **kwargs)
         if not request.session.get('is_logged_in'):
             return redirect('login')
         if not request.session.get('is_admin'):
@@ -606,35 +609,6 @@ def get_call_signals(request):
 
 # ── Admin Dashboard ──────────────────────────────────────────────────────────
 
-@admin_required
-def admin_users(request):
-    users_data = []
-    try:
-        for u in User.objects.all().order_by('name'):
-            msg_count = Message.objects.filter(Q(sender=u) | Q(receiver=u)).count()
-            sess = UserSession.objects.filter(user=u).order_by('-last_seen').first()
-            users_data.append({
-                'id': u.id,
-                'name': u.name,
-                'email': u.email,
-                'mobile': u.mobile or '',
-                'is_active': u.is_active,
-                'messages': msg_count,
-                'is_online': sess.is_online if sess else False,
-                'last_seen': sess.last_seen.strftime('%Y-%m-%d %H:%M') if sess else 'Never',
-            })
-    except Exception as e:
-        logger.error(f'Error loading admin users: {e}')
-    total = len(users_data)
-    active_count = sum(1 for x in users_data if x['is_active'])
-    return render(request, 'admin_users.html', {
-        'users_data': users_data,
-        'total': total,
-        'active_count': active_count,
-        'off_count': total - active_count,
-    })
-
-
 @csrf_exempt
 @admin_required
 def admin_users_toggle(request):
@@ -661,23 +635,78 @@ def admin_users_toggle(request):
     return JsonResponse({'status': 'ok', 'is_active': target.is_active})
 
 
-@admin_required
-def admin_dashboard(request):
-    return render(request, 'admin_dashboard.html')
+# ── Standalone Admin Console (/admin/) ─────────────────────────────────────
+# Single admin page with its own username/password login, separate from
+# the chat user sessions.
+
+def _console_authed(request):
+    return bool(request.session.get('admin_auth'))
 
 
-def debug_admin_check(request):
-    """Temporary debug - remove after fixing"""
-    if not request.session.get('is_logged_in'):
-        return JsonResponse({'error': 'not logged in'})
-    session_email = request.session.get('email', '')
-    session_is_admin = request.session.get('is_admin', False)
-    env_admin_email = getattr(settings, 'ADMIN_EMAIL', 'NOT SET')
-    return JsonResponse({
-        'session_email': session_email,
-        'session_is_admin': session_is_admin,
-        'env_admin_email': env_admin_email,
-        'match': session_email.strip().lower() == env_admin_email,
+def console_admin_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.session.get('admin_auth'):
+            return redirect('admin_console')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+@csrf_exempt
+def admin_console(request):
+    if request.method == 'POST':
+        action = request.POST.get('action', 'login')
+        if action == 'logout':
+            request.session.pop('admin_auth', None)
+            request.session.pop('admin_user', None)
+            return redirect('admin_console')
+        username = (request.POST.get('username') or '').strip()
+        password = request.POST.get('password') or ''
+        if username == getattr(settings, 'CONSOLE_ADMIN_USERNAME', 'admin') and \
+                password == getattr(settings, 'CONSOLE_ADMIN_PASSWORD', ''):
+            request.session['admin_auth'] = True
+            request.session['admin_user'] = username
+            logger.info(f'Console admin login: {username}')
+            return redirect('admin_console')
+        logger.warning(f'Failed console admin login attempt: {username}')
+        return render(request, 'admin.html', {'show_login': True, 'login_error': 'Invalid username or password'})
+
+    if not _console_authed(request):
+        return render(request, 'admin.html', {'show_login': True})
+
+    # Console data (server-rendered once; logs/health refresh via JS)
+    stats = {'total_users': 0, 'active': 0, 'off': 0, 'messages': 0, 'recent': 0, 'online': 0}
+    users_data = []
+    try:
+        from django.utils import timezone
+        users = list(User.objects.all().order_by('name'))
+        stats['total_users'] = len(users)
+        stats['active'] = sum(1 for u in users if u.is_active)
+        stats['off'] = stats['total_users'] - stats['active']
+        stats['messages'] = Message.objects.count()
+        stats['recent'] = Message.objects.filter(
+            timestamp__gte=timezone.now() - timedelta(hours=24)).count()
+        cutoff = timezone.now() - timedelta(minutes=10)
+        UserSession.objects.filter(is_online=True, last_seen__lt=cutoff).update(is_online=False)
+        stats['online'] = UserSession.objects.filter(is_online=True).count()
+        for u in users:
+            sess = UserSession.objects.filter(user=u).order_by('-last_seen').first()
+            users_data.append({
+                'id': u.id,
+                'name': u.name,
+                'email': u.email,
+                'mobile': u.mobile or '',
+                'is_active': u.is_active,
+                'messages': Message.objects.filter(Q(sender=u) | Q(receiver=u)).count(),
+                'is_online': sess.is_online if sess else False,
+                'last_seen': sess.last_seen.strftime('%Y-%m-%d %H:%M') if sess else 'Never',
+            })
+    except Exception as e:
+        logger.error(f'Admin console data error: {e}')
+    return render(request, 'admin.html', {
+        'stats': stats,
+        'users_data': users_data,
+        'admin_user': request.session.get('admin_user', 'admin'),
     })
 
 

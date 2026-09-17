@@ -11,6 +11,10 @@ SECRET_KEY = os.environ.get("SECRET_KEY", os.environ.get("DJANGO_SECRET_KEY", "c
 
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 
+# Standalone admin-console login (/admin/). SET THESE IN PRODUCTION ENV.
+CONSOLE_ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+CONSOLE_ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Aditya")
+
 DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
 
 _env_hosts = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()]

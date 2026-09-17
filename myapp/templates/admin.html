@@ -1,0 +1,338 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — DashSocial</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%234f46e5'/><text x='50' y='70' font-size='60' font-family='Arial,sans-serif' font-weight='bold' text-anchor='middle' fill='white'>D</text></svg>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/glass.css' %}">
+    <link rel="stylesheet" href="{% static 'css/login.css' %}">
+    <link rel="stylesheet" href="{% static 'css/admin.css' %}">
+    <style>
+        .login-wrap { min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 20px; position: relative; z-index: 1; }
+        .login-box { width: 100%; max-width: 360px; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+        .tab-btn { padding: 9px 20px; border-radius: 40px; border: 1px solid var(--stroke); background: rgba(255,255,255,0.6); color: var(--sub); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+        .tab-btn:hover { color: var(--ink); border-color: var(--accent-line); }
+        .tab-btn.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; animation: gFadeUp 0.3s ease-out; }
+        .admin-chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 40px; background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent-deep); font-size: 12px; font-weight: 700; }
+        .btn-danger { background: var(--error-soft); color: #b91c1c; border: 1px solid rgba(220,38,38,0.3); }
+        .btn-danger:hover { background: rgba(220,38,38,0.15); }
+        @media (max-width: 768px) { .login-box { max-width: 420px; } }
+    </style>
+</head>
+{% if show_login %}
+<body>
+<div class="login-wrap">
+    <div class="login-box">
+        <div class="ig-card">
+            <h1 class="ig-brand">Dash<span>Social</span></h1>
+            <p class="ig-tag" style="text-align:center;color:#64748b;font-size:13px;margin-bottom:18px;">Admin Console — sign in to continue</p>
+            {% if login_error %}
+            <div class="ig-alert">{{ login_error }}</div>
+            {% endif %}
+            <form action="{% url 'admin_console' %}" method="post">
+                {% csrf_token %}
+                <input class="ig-input" type="text" name="username" placeholder="Username" required autocomplete="username">
+                <input class="ig-input" type="password" name="password" placeholder="Password" required autocomplete="current-password">
+                <button class="ig-btn" type="submit">Log in</button>
+            </form>
+        </div>
+        <p class="ig-foot">© 2026 DashSocial</p>
+    </div>
+</div>
+</body>
+{% else %}
+<body class="rail-pad">
+{% include 'partials/sidebar.html' with active='admin' fixed=True %}
+<div class="container">
+
+    <div class="header">
+        <h1><i class="fas fa-user-shield"></i> Admin Console</h1>
+        <div class="header-actions">
+            <span class="admin-chip"><i class="fas fa-user"></i> {{ admin_user }}</span>
+            <button class="btn" id="maintBtn" onclick="toggleMaintenance()"><i class="fas fa-tools"></i> <span id="maintText">Maintenance: …</span></button>
+            <form action="{% url 'admin_console' %}" method="post" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="logout">
+                <button class="btn btn-danger" type="submit"><i class="fas fa-sign-out-alt"></i> Logout</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('overview', this)">Overview</button>
+        <button class="tab-btn" onclick="showTab('users', this)">Users</button>
+        <button class="tab-btn" onclick="showTab('logs', this)">Logs</button>
+        <button class="tab-btn" onclick="showTab('server', this)">Server</button>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div class="tab-pane active" id="tab-overview">
+        <div class="stats-grid">
+            <div class="stat-card"><h3>Total Users</h3><div class="stat-value">{{ stats.total_users }}</div><div class="stat-sub">Registered</div></div>
+            <div class="stat-card stat-online"><h3>Active</h3><div class="stat-value">{{ stats.active }}</div><div class="stat-sub">Can log in</div></div>
+            <div class="stat-card stat-err"><h3>Deactivated</h3><div class="stat-value">{{ stats.off }}</div><div class="stat-sub">Blocked</div></div>
+            <div class="stat-card stat-online"><h3>Online Now</h3><div class="stat-value">{{ stats.online }}</div><div class="stat-sub">Active sessions</div></div>
+            <div class="stat-card stat-msg"><h3>Messages</h3><div class="stat-value">{{ stats.messages }}</div><div class="stat-sub">All time</div></div>
+            <div class="stat-card"><h3>Last 24h</h3><div class="stat-value">{{ stats.recent }}</div><div class="stat-sub">Recent activity</div></div>
+        </div>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-wifi"></i> Online Sessions</div>
+                <button class="btn btn-secondary" onclick="loadOnline()"><i class="fas fa-sync"></i> Refresh</button>
+            </div>
+            <div style="overflow-x:auto">
+                <table class="data-table">
+                    <thead><tr><th>Status</th><th>Name</th><th>Email</th><th>Device</th><th>Browser</th><th>Last seen</th></tr></thead>
+                    <tbody id="onlineBody"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- USERS -->
+    <div class="tab-pane" id="tab-users">
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-users"></i> All Users</div>
+                <input id="userSearch" class="users-search" type="text" placeholder="Search name or email…">
+            </div>
+            <div style="overflow-x:auto">
+                <table class="data-table" id="usersTable">
+                    <thead><tr><th>Status</th><th>User</th><th>Mobile</th><th>Messages</th><th>Last seen</th><th>Access</th></tr></thead>
+                    <tbody>
+                        {% for x in users_data %}
+                        <tr id="row-{{ x.id }}" class="{% if not x.is_active %}row-off{% endif %}">
+                            <td style="white-space:nowrap">
+                                <span id="dot-{{ x.id }}" class="{% if x.is_active %}dot-online{% else %}dot-offline{% endif %}"></span>
+                                <span id="badge-{{ x.id }}" class="badge {% if x.is_active %}badge-online{% else %}badge-offline{% endif %}">{% if x.is_active %}Active{% else %}Off{% endif %}</span>
+                            </td>
+                            <td>
+                                <div class="u-cell">
+                                    <div class="u-av">{{ x.name|slice:":1" }}</div>
+                                    <div><div class="u-name">{{ x.name }} {% if x.is_online %}<span class="u-live">● online</span>{% endif %}</div><div class="u-email">{{ x.email }}</div></div>
+                                </div>
+                            </td>
+                            <td>{{ x.mobile|default:"—" }}</td>
+                            <td>{{ x.messages }}</td>
+                            <td style="color:var(--muted);font-size:11px;white-space:nowrap">{{ x.last_seen }}</td>
+                            <td>
+                                <select class="access-select" onchange="toggleAccess({{ x.id }}, this)">
+                                    <option value="1" {% if x.is_active %}selected{% endif %}>Active</option>
+                                    <option value="0" {% if not x.is_active %}selected{% endif %}>Deactivated</option>
+                                </select>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="empty-state">No users found</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGS -->
+    <div class="tab-pane" id="tab-logs">
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-file-alt"></i> App Logs</div>
+                <div class="filter-controls">
+                    <button class="filter-btn active" onclick="loadLogs('all', this)">All</button>
+                    <button class="filter-btn" onclick="loadLogs('ERROR', this)">Errors</button>
+                    <button class="filter-btn" onclick="loadLogs('WARNING', this)">Warnings</button>
+                    <button class="filter-btn" onclick="loadLogs('INFO', this)">Info</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto">
+                <table class="data-table">
+                    <thead><tr><th>Time</th><th>Level</th><th>Message</th><th>Source</th></tr></thead>
+                    <tbody id="logsBody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- SERVER -->
+    <div class="tab-pane" id="tab-server">
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-server"></i> Server Health</div>
+                <button class="btn btn-secondary" onclick="loadHealth()"><i class="fas fa-sync"></i> Refresh</button>
+            </div>
+            <div id="healthContent"><div class="empty-state">Loading…</div></div>
+        </div>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-tools"></i> Maintenance Mode</div>
+            </div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">When ON, all users see the maintenance screen. Admins keep full access.</p>
+            <button class="btn" id="maintBtn2" onclick="toggleMaintenance()"><i class="fas fa-tools"></i> <span id="maintText2">…</span></button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? v[2] : '';
+}
+function esc(t) {
+    const d = document.createElement('div');
+    d.textContent = t || '';
+    return d.innerHTML;
+}
+
+function showTab(name, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'logs') loadLogs('all', document.querySelector('#tab-logs .filter-btn'));
+    if (name === 'server') loadHealth();
+    if (name === 'overview') loadOnline();
+}
+
+/* users */
+document.getElementById('userSearch').addEventListener('input', function () {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#usersTable tbody tr').forEach(tr => {
+        tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+    });
+});
+function toggleAccess(uid, sel) {
+    const toActive = sel.value === '1';
+    if (!toActive && !confirm('Deactivate this user? They will be logged out and blocked from logging in.')) {
+        sel.value = '1';
+        return;
+    }
+    fetch('/admin-users/toggle/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ user_id: uid, is_active: toActive })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.status !== 'ok') { alert(d.message || 'Failed'); location.reload(); return; }
+        document.getElementById('row-' + uid).classList.toggle('row-off', !d.is_active);
+        const badge = document.getElementById('badge-' + uid);
+        badge.textContent = d.is_active ? 'Active' : 'Off';
+        badge.className = 'badge ' + (d.is_active ? 'badge-online' : 'badge-offline');
+        document.getElementById('dot-' + uid).className = d.is_active ? 'dot-online' : 'dot-offline';
+    })
+    .catch(() => { alert('Request failed'); location.reload(); });
+}
+
+/* online sessions */
+function loadOnline() {
+    fetch('/admin-online-users/')
+    .then(r => r.json())
+    .then(d => {
+        const tb = document.getElementById('onlineBody');
+        if (!d.sessions || !d.sessions.length) {
+            tb.innerHTML = '<tr><td colspan="6" class="empty-state">No sessions</td></tr>';
+            return;
+        }
+        tb.innerHTML = d.sessions.slice(0, 20).map(s => `
+            <tr>
+                <td><span class="${s.is_online ? 'dot-online' : 'dot-offline'}"></span>
+                    <span class="badge ${s.is_online ? 'badge-online' : 'badge-offline'}">${s.is_online ? 'Online' : 'Offline'}</span></td>
+                <td style="font-weight:700">${esc(s.user)}</td>
+                <td style="color:var(--muted)">${esc(s.email)}</td>
+                <td style="text-transform:capitalize">${esc(s.device_type)}</td>
+                <td>${esc(s.browser)}</td>
+                <td style="color:var(--muted);font-size:11px">${esc(s.last_seen)}</td>
+            </tr>`).join('');
+    })
+    .catch(() => {});
+}
+
+/* logs */
+function loadLogs(level, btn) {
+    document.querySelectorAll('#tab-logs .filter-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const q = (level && level !== 'all') ? '?level=' + level : '';
+    fetch('/admin-logs/' + q)
+    .then(r => r.json())
+    .then(d => {
+        const tb = document.getElementById('logsBody');
+        const logs = d.logs || [];
+        if (!logs.length) { tb.innerHTML = '<tr><td colspan="4" class="empty-state">No logs</td></tr>'; return; }
+        tb.innerHTML = logs.slice(0, 60).map(l => `
+            <tr>
+                <td class="log-time">${esc(l.time)}</td>
+                <td><span class="log-level ${String(l.level).toLowerCase()}">${esc(l.level)}</span></td>
+                <td class="log-message">${esc(l.message)}</td>
+                <td><span class="log-source">${esc(l.source)}</span></td>
+            </tr>`).join('');
+    })
+    .catch(() => {});
+}
+
+/* server health */
+function loadHealth() {
+    fetch('/admin-server-health/')
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            document.getElementById('healthContent').innerHTML = '<div class="health-error">' + esc(d.error) + '</div>';
+            return;
+        }
+        const bar = p => p > 85 ? 'bar-red' : p > 60 ? 'bar-yellow' : 'bar-green';
+        const col = p => p > 85 ? 'var(--error)' : p > 60 ? 'var(--warning)' : 'var(--success)';
+        document.getElementById('healthContent').innerHTML = `
+            <div class="health-grid">
+                <div class="health-item"><div class="health-label">CPU</div>
+                    <div class="health-value" style="color:${col(d.cpu_percent)}">${d.cpu_percent}%</div>
+                    <div class="health-bar"><div class="health-bar-fill ${bar(d.cpu_percent)}" style="width:${d.cpu_percent}%"></div></div></div>
+                <div class="health-item"><div class="health-label">Memory</div>
+                    <div class="health-value" style="color:${col(d.memory_percent)}">${d.memory_percent}%</div>
+                    <div class="health-bar"><div class="health-bar-fill ${bar(d.memory_percent)}" style="width:${d.memory_percent}%"></div></div>
+                    <div class="health-sub">${d.memory_used_mb} / ${d.memory_total_mb} MB</div></div>
+                <div class="health-item"><div class="health-label">Disk</div>
+                    <div class="health-value" style="color:${col(d.disk_percent)}">${d.disk_percent}%</div>
+                    <div class="health-bar"><div class="health-bar-fill ${bar(d.disk_percent)}" style="width:${d.disk_percent}%"></div></div>
+                    <div class="health-sub">${d.disk_used_gb} / ${d.disk_total_gb} GB</div></div>
+            </div>`;
+    })
+    .catch(() => {});
+}
+
+/* maintenance */
+let maintenanceOn = false;
+function updateMaintUI(isOn) {
+    maintenanceOn = isOn;
+    [['maintBtn', 'maintText'], ['maintBtn2', 'maintText2']].forEach(([b, t]) => {
+        const btn = document.getElementById(b), txt = document.getElementById(t);
+        if (!btn || !txt) return;
+        btn.className = 'btn ' + (isOn ? 'btn-maint-on' : 'btn-maint-off');
+        txt.textContent = 'Maintenance: ' + (isOn ? 'ON' : 'OFF');
+    });
+}
+function toggleMaintenance() {
+    const next = !maintenanceOn;
+    if (next && !confirm('Enable maintenance mode? Users will see the maintenance screen.')) return;
+    fetch('/admin-maintenance/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ enabled: next })
+    })
+    .then(r => r.json())
+    .then(d => updateMaintUI(!!d.maintenance))
+    .catch(() => {});
+}
+
+loadOnline();
+loadLogs('all', null);
+fetch('/admin-maintenance/').then(r => r.json()).then(d => updateMaintUI(!!d.maintenance)).catch(() => {});
+</script>
+</body>
+{% endif %}
+</html>

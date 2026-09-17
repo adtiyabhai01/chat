@@ -17,6 +17,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.urls import path
+from django.views.generic import RedirectView
 from . import views
 from .views import get_users_with_unread
 
@@ -37,11 +38,11 @@ urlpatterns = [
     path('get-typing/<int:user_id>/', views.get_typing, name='get_typing'),
     path('send-call-signal/', views.send_call_signal, name='send_call_signal'),
     path('get-call-signals/', views.get_call_signals, name='get_call_signals'),
-    path('admin-dashboard/', views.admin_dashboard, name='admin_dashboard'),
-    path('admin-users/', views.admin_users, name='admin_users'),
+    path('admin/', views.admin_console, name='admin_console'),
+    path('admin-dashboard/', RedirectView.as_view(url='/admin/', permanent=False)),
+    path('admin-users/', RedirectView.as_view(url='/admin/', permanent=False)),
     path('admin-users/toggle/', views.admin_users_toggle, name='admin_users_toggle'),
     path('access-denied/', views.access_denied, name='access_denied'),
-    path('debug-admin/', views.debug_admin_check, name='debug_admin_check'),
     path('admin-stats/', views.admin_stats, name='admin_stats'),
     path('admin-logs/', views.admin_logs, name='admin_logs'),
     path('admin-online-users/', views.admin_online_users, name='admin_online_users'),
