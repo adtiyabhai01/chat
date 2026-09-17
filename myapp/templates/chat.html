@@ -48,7 +48,7 @@
 
             <div class="conv-tabs" role="tablist">
                 <button class="conv-tab is-active" data-filter="all" type="button">All</button>
-                <button class="conv-tab" data-filter="unread" type="button">Unread <span class="tab-count" id="unreadTotal" hidden></span></button>
+                <button class="conv-tab" data-filter="unread" type="button" id="unreadTab" hidden>Unread <span class="tab-count" id="unreadTotal"></span></button>
             </div>
         </div>
 
@@ -66,10 +66,10 @@
                     <div class="chat-info">
                         <div class="chat-name">
                             <h4>{{ u.name }}</h4>
-                            <span class="chat-time" data-time>now</span>
+                            <span class="chat-time" data-time>{{ u.last_time }}</span>
                         </div>
                         <div class="chat-bottom">
-                            <div class="last-message">Tap to start chatting</div>
+                            <div class="last-message">{% if u.last_text %}{{ u.last_text }}{% else %}Tap to start chatting{% endif %}</div>
                             <span class="unread-badge" id="badge-{{ u.id }}"></span>
                         </div>
                     </div>
@@ -292,7 +292,7 @@
         // Show call buttons only once a conversation is selected
         document.getElementById('callActions').style.display = '';
         if (messagesContainer) messagesContainer.innerHTML = '';
-        renderedIds = new Set(); tickById = {};
+        renderedIds = new Set(); tickById = {}; lastMsgDate = '';
         toggleSendState();
 
         document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
@@ -302,6 +302,11 @@
 
         const badge = document.getElementById(`badge-${userId}`);
         if (badge) { badge.textContent = ''; badge.classList.remove('visible'); }
+
+        // Instantly recount from DOM so Unread tab hides right away if that was the last one
+        const remaining = [...document.querySelectorAll('.unread-badge.visible')]
+            .reduce((n, b) => n + (parseInt(b.textContent) || 1), 0);
+        syncUnreadTab(remaining);
 
         loadMessages(userId);
         if (chatInterval) clearInterval(chatInterval);
@@ -328,7 +333,7 @@
         // so slow/out-of-order responses can never duplicate or lose messages.
         const nowTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
         const tmpId = 'tmp-' + Date.now().toString(36) + Math.floor(Math.random() * 1e6);
-        appendMessage(message, 'sent', nowTime, false, tmpId);
+        appendMessage(message, 'sent', nowTime, false, tmpId, todayISO());
         const optimistic = messagesContainer.lastElementChild;
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
         messageInput.value = '';
@@ -377,6 +382,48 @@
         pill.style.display = show ? 'block' : 'none';
     }
 
+    let lastMsgDate = '';
+
+    function localISO(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function todayISO() { return localISO(new Date()); }
+    function yesterdayISO() { return localISO(new Date(Date.now() - 864e5)); }
+
+    // Instagram-style day separators: Today / Yesterday / 12 Sep 2026
+    function dateLabel(iso) {
+        if (!iso) return '';
+        if (iso === todayISO()) return 'Today';
+        if (iso === yesterdayISO()) return 'Yesterday';
+        const p = iso.split('-');
+        const d = new Date(+p[0], +p[1] - 1, +p[2]);
+        return isNaN(d) ? iso : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    function appendDatePill(iso) {
+        if (!iso || !messagesContainer) return;
+        const pill = document.createElement('div');
+        pill.className = 'date-pill';
+        pill.dataset.date = iso;
+        pill.textContent = dateLabel(iso);
+        messagesContainer.appendChild(pill);
+    }
+
+    // Keep the sidebar preview (text + time) fresh without reload
+    function updatePreview(userId, text, time) {
+        const badge = document.getElementById(`badge-${userId}`);
+        const item = badge?.closest('.chat-item');
+        if (!item) return;
+        if (text) {
+            const lm = item.querySelector('.last-message');
+            if (lm) lm.textContent = text;
+        }
+        if (time) {
+            const ct = item.querySelector('.chat-time');
+            if (ct) ct.textContent = time;
+        }
+    }
+
     function loadMessages(userId) {
         if (pollInflight) return;   // never stack requests on a slow server
         pollInflight = true;
@@ -405,7 +452,7 @@
                 // Shrunk list -> full rebuild to guarantee order
                 if (messages.length < renderedIds.size) {
                     messagesContainer.innerHTML = '';
-                    renderedIds = new Set(); tickById = {};
+                    renderedIds = new Set(); tickById = {}; lastMsgDate = '';
                 }
             }
 
@@ -423,8 +470,17 @@
                     return;
                 }
                 const type = (msg.sender == CURRENT_USER_ID) ? 'sent' : 'received';
-                appendMessage(msg.message || msg.text || '', type, msg.time || '', msg.is_read, key);
+                appendMessage(msg.message || msg.text || '', type, msg.time || '', msg.is_read, key, msg.date);
             });
+
+            // Sidebar preview for the open chat stays current
+            if (messages.length) {
+                const last = messages[messages.length - 1];
+                let txt = last.message || last.text || '';
+                if (txt.length > 42) txt = txt.slice(0, 42).trimEnd() + '…';
+                if (last.sender == CURRENT_USER_ID) txt = 'You: ' + txt;
+                updatePreview(userId, txt, last.time || '');
+            }
 
             if (wasAtBottom) messagesContainer.scrollTop = messagesContainer.scrollHeight;
         })
@@ -444,9 +500,14 @@
         return m ? `${m[1].padStart(2, '0')}:${m[2]}` : String(raw);
     }
 
-    function appendMessage(text, type, time, isRead, mid) {
+    function appendMessage(text, type, time, isRead, mid, date) {
         if (!messagesContainer) return;
         messagesContainer.querySelector('.no-chat-selected')?.remove();
+
+        if (date && date !== lastMsgDate) {
+            lastMsgDate = date;
+            appendDatePill(date);
+        }
 
         const wrap = document.createElement('div');
         wrap.className = `msg-wrap ${type}`;
@@ -487,6 +548,26 @@
         if (mid !== undefined && mid !== null) renderedIds.add(String(mid));
     }
 
+    // Unread tab shows only when there is real unread. Otherwise it stays hidden.
+    function syncUnreadTab(total) {
+        const tab = document.getElementById('unreadTab');
+        const pill = document.getElementById('unreadTotal');
+        if (!tab) return;
+        if (total > 0) {
+            tab.hidden = false;
+            if (pill) pill.textContent = total > 99 ? '99+' : total;
+        } else {
+            tab.hidden = true;
+            // If user was viewing Unread and nothing is unread anymore, fall back to All
+            if (activeFilter === 'unread') {
+                activeFilter = 'all';
+                document.querySelectorAll('.conv-tab').forEach(x =>
+                    x.classList.toggle('is-active', x.dataset.filter === 'all'));
+                filterList();
+            }
+        }
+    }
+
     function loadUnreadBadges() {
         fetch('/get_users_with_unread/')
         .then(r => r.json())
@@ -495,6 +576,7 @@
             (data.users || []).forEach(u => {
                 const badge = document.getElementById(`badge-${u.id}`);
                 if (!badge) return;
+                if (u.last_text || u.last_time) updatePreview(u.id, u.last_text, u.last_time);
                 if (u.unread > 0 && String(u.id) !== String(currentUserId)) {
                     badge.textContent = u.unread > 99 ? '99+' : u.unread;
                     badge.classList.add('visible');
@@ -504,11 +586,7 @@
                     badge.classList.remove('visible');
                 }
             });
-            const pill = document.getElementById('unreadTotal');
-            if (pill) {
-                if (total > 0) { pill.hidden = false; pill.textContent = total > 99 ? '99+' : total; }
-                else { pill.hidden = true; }
-            }
+            syncUnreadTab(total);
             if (activeFilter === 'unread') filterList();
         }).catch(() => {});
     }

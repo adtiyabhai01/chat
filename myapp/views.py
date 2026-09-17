@@ -17,6 +17,14 @@ from .logging_service import get_logger
 logger = get_logger(__name__)
 
 
+def _t12(ts):
+    """User-facing chat time in 12-hour format: '2:30 PM'."""
+    try:
+        return ts.strftime('%I:%M %p').lstrip('0')
+    except Exception:
+        return ''
+
+
 def custom_login_required(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -98,7 +106,7 @@ def home(request):
                         'name': other.name,
                         'avatar': other.profile_image.url if other.profile_image else '',
                         'last_text': m.text,
-                        'time': m.timestamp.strftime('%H:%M'),
+                        'time': _t12(m.timestamp),
                         'unread': mine.filter(sender=other, receiver=user, is_read=False).count(),
                     }
                 if len(seen) >= 5:
@@ -278,13 +286,53 @@ def main(request):
     return render(request, 'main.html')
 
 
+def _recent_map(user, limit=300):
+    """Latest message per conversation partner: {user_id: {'text', 'time'}}.
+
+    Text is prefixed with 'You: ' for own messages (chat-app style), time is
+    HH:MM for today, 'Yesterday', or 'dd Mon' for older.
+    """
+    from django.utils import timezone
+    today = timezone.now().date()
+    out = {}
+    try:
+        recent = Message.objects.filter(
+            Q(sender=user) | Q(receiver=user)
+        ).select_related('sender', 'receiver').order_by('-timestamp')[:limit]
+        for m in recent:
+            oid = m.receiver_id if m.sender_id == user.id else m.sender_id
+            if oid in out:
+                continue
+            text = m.text or ''
+            if len(text) > 42:
+                text = text[:42].rstrip() + '…'
+            if m.sender_id == user.id:
+                text = 'You: ' + text
+            ts = m.timestamp
+            if ts.date() == today:
+                when = ts.strftime('%H:%M')
+            elif ts.date() == today - timedelta(days=1):
+                when = 'Yesterday'
+            else:
+                when = ts.strftime('%d %b')
+            out[oid] = {'text': text, 'time': when}
+    except Exception as e:
+        logger.error(f'Recent map error: {e}')
+    return out
+
+
 @custom_login_required
 def chat(request):
     email = request.session.get('email')
 
     try:
         user = User.objects.get(email=email)
-        users = User.objects.exclude(id=user.id)
+        users = list(User.objects.exclude(id=user.id).order_by('name'))
+        previews = _recent_map(user)
+        for u in users:
+            info = previews.get(u.id, {})
+            u.last_text = info.get('text', '')
+            u.last_time = info.get('time', '')
     except User.DoesNotExist:
         request.session.flush()
         return redirect('login')
@@ -469,6 +517,7 @@ def get_messages(request, user_id):
                 "sender": msg.sender_id,
                 "message": msg.text,
                 "time": msg.timestamp.strftime("%H:%M"),
+                "date": msg.timestamp.strftime("%Y-%m-%d"),
                 "is_read": msg.is_read
             }
             for msg in messages
@@ -485,6 +534,8 @@ def get_users_with_unread(request):
         return JsonResponse({"users": []})
 
     try:
+        me = User.objects.get(id=current_user_id)
+        previews = _recent_map(me)
         users = User.objects.exclude(id=current_user_id)
         user_list = []
 
@@ -494,7 +545,13 @@ def get_users_with_unread(request):
                 receiver_id=current_user_id,
                 is_read=False
             ).count()
-            user_list.append({"id": u.id, "unread": unread_count})
+            info = previews.get(u.id, {})
+            user_list.append({
+                "id": u.id,
+                "unread": unread_count,
+                "last_text": info.get('text', ''),
+                "last_time": info.get('time', ''),
+            })
 
         return JsonResponse({"users": user_list})
     except Exception as e:
