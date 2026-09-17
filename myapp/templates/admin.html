@@ -104,10 +104,10 @@
             </div>
             <div style="overflow-x:auto">
                 <table class="data-table" id="usersTable">
-                    <thead><tr><th>Status</th><th>User</th><th>Mobile</th><th>Messages</th><th>Last seen</th><th>Access</th></tr></thead>
+                    <thead><tr><th>Status</th><th>User</th><th>Mobile</th><th>Messages</th><th>Last seen</th><th>Access</th><th></th></tr></thead>
                     <tbody>
                         {% for x in users_data %}
-                        <tr id="row-{{ x.id }}" class="{% if not x.is_active %}row-off{% endif %}">
+                        <tr id="row-{{ x.id }}" class="u-row{% if not x.is_active %} row-off{% endif %}" onclick="openUserDetail({{ x.id }})">
                             <td style="white-space:nowrap">
                                 <span id="dot-{{ x.id }}" class="{% if x.is_active %}dot-online{% else %}dot-offline{% endif %}"></span>
                                 <span id="badge-{{ x.id }}" class="badge {% if x.is_active %}badge-online{% else %}badge-offline{% endif %}">{% if x.is_active %}Active{% else %}Off{% endif %}</span>
@@ -122,14 +122,17 @@
                             <td>{{ x.messages }}</td>
                             <td style="color:var(--muted);font-size:11px;white-space:nowrap">{{ x.last_seen }}</td>
                             <td>
-                                <select class="access-select" onchange="toggleAccess({{ x.id }}, this)">
-                                    <option value="1" {% if x.is_active %}selected{% endif %}>Active</option>
-                                    <option value="0" {% if not x.is_active %}selected{% endif %}>Deactivated</option>
-                                </select>
-                            </td>
+                            <select class="access-select {% if x.is_active %}on{% else %}off{% endif %}" onclick="event.stopPropagation()" onchange="toggleAccess({{ x.id }}, this)">
+                                <option value="1" {% if x.is_active %}selected{% endif %}>● Active</option>
+                                <option value="0" {% if not x.is_active %}selected{% endif %}>● Deactivated</option>
+                            </select>
+                        </td>
+                        <td>
+                            <button class="del-btn" title="Delete user" onclick="event.stopPropagation();deleteUser({{ x.id }}, '{{ x.name|escapejs }}')"><i class="fas fa-trash"></i></button>
+                        </td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="6" class="empty-state">No users found</td></tr>
+                        <tr><td colspan="7" class="empty-state">No users found</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -163,7 +166,10 @@
         <div class="section">
             <div class="section-header">
                 <div class="section-title"><i class="fas fa-server"></i> Server Health</div>
-                <button class="btn btn-secondary" onclick="loadHealth()"><i class="fas fa-sync"></i> Refresh</button>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:11px;color:var(--muted)" id="healthUpdated"></span>
+                    <button class="btn btn-secondary" onclick="loadHealth()"><i class="fas fa-sync"></i> Refresh</button>
+                </div>
             </div>
             <div id="healthContent"><div class="empty-state">Loading…</div></div>
         </div>
@@ -176,6 +182,33 @@
         </div>
     </div>
 
+</div>
+
+<!-- USER DETAIL MODAL -->
+<div id="userModal" class="umodal-overlay" style="display:none;" onclick="if(event.target===this)closeUserModal()">
+    <div class="umodal">
+        <div class="umodal-head">
+            <div class="u-cell">
+                <div class="u-av" id="mAv" style="width:46px;height:46px;font-size:19px;">?</div>
+                <div>
+                    <div class="u-name" id="mName" style="font-size:16px;">—</div>
+                    <div class="u-email" id="mEmail">—</div>
+                </div>
+            </div>
+            <button class="icon-x" onclick="closeUserModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="m-chips" id="mStats"></div>
+        <div class="umodal-actions" id="mActions"></div>
+        <div class="g-label" style="margin:16px 0 8px;">Login history</div>
+        <div style="overflow-x:auto;max-height:240px;overflow-y:auto;">
+            <table class="data-table">
+                <thead><tr><th>Status</th><th>Device</th><th>Browser</th><th>OS</th><th>IP</th><th>Login</th><th>Last seen</th></tr></thead>
+                <tbody id="mSessions"><tr><td colspan="7" class="empty-state">Loading…</td></tr></tbody>
+            </table>
+        </div>
+        <div class="g-label" style="margin:16px 0 8px;">Recent messages</div>
+        <div id="mRecent" class="m-recent"><div class="empty-state">Loading…</div></div>
+    </div>
 </div>
 
 <script>
@@ -206,27 +239,115 @@ document.getElementById('userSearch').addEventListener('input', function () {
         tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
     });
 });
-function toggleAccess(uid, sel) {
-    const toActive = sel.value === '1';
-    if (!toActive && !confirm('Deactivate this user? They will be logged out and blocked from logging in.')) {
-        sel.value = '1';
-        return;
-    }
-    fetch('/admin-users/toggle/', {
+function postAccess(uid, toActive) {
+    return fetch('/admin-users/toggle/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
         body: JSON.stringify({ user_id: uid, is_active: toActive })
+    }).then(r => r.json());
+}
+function refreshRow(uid, isActive) {
+    const row = document.getElementById('row-' + uid);
+    if (row) row.classList.toggle('row-off', !isActive);
+    const badge = document.getElementById('badge-' + uid);
+    if (badge) {
+        badge.textContent = isActive ? 'Active' : 'Off';
+        badge.className = 'badge ' + (isActive ? 'badge-online' : 'badge-offline');
+    }
+    const dot = document.getElementById('dot-' + uid);
+    if (dot) dot.className = isActive ? 'dot-online' : 'dot-offline';
+    const sel = row ? row.querySelector('.access-select') : null;
+    if (sel) { sel.value = isActive ? '1' : '0'; sel.className = 'access-select ' + (isActive ? 'on' : 'off'); }
+}
+function toggleAccess(uid, sel) {
+    const toActive = sel.value === '1';
+    sel.disabled = true;
+    postAccess(uid, toActive)
+    .then(d => {
+        sel.disabled = false;
+        if (d.status !== 'ok') { alert(d.message || 'Failed'); location.reload(); return; }
+        refreshRow(uid, d.is_active);
+        if (modalUserId === uid) openUserDetail(uid);
+    })
+    .catch(() => { alert('Request failed'); location.reload(); });
+}
+
+/* delete user (destructive -> keep confirm) */
+function deleteUser(uid, name) {
+    if (!confirm('Permanently delete "' + name + '" and ALL their messages? This cannot be undone.')) return;
+    fetch('/admin-users/delete/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ user_id: uid })
     })
     .then(r => r.json())
     .then(d => {
-        if (d.status !== 'ok') { alert(d.message || 'Failed'); location.reload(); return; }
-        document.getElementById('row-' + uid).classList.toggle('row-off', !d.is_active);
-        const badge = document.getElementById('badge-' + uid);
-        badge.textContent = d.is_active ? 'Active' : 'Off';
-        badge.className = 'badge ' + (d.is_active ? 'badge-online' : 'badge-offline');
-        document.getElementById('dot-' + uid).className = d.is_active ? 'dot-online' : 'dot-offline';
+        if (d.status !== 'ok') { alert(d.message || 'Failed'); return; }
+        if (modalUserId === uid) closeUserModal();
+        location.reload();
     })
-    .catch(() => { alert('Request failed'); location.reload(); });
+    .catch(() => alert('Request failed'));
+}
+
+/* user detail modal */
+let modalUserId = null;
+function openUserDetail(uid) {
+    modalUserId = uid;
+    document.getElementById('userModal').style.display = 'flex';
+    document.getElementById('mSessions').innerHTML = '<tr><td colspan="7" class="empty-state">Loading…</td></tr>';
+    document.getElementById('mRecent').innerHTML = '<div class="empty-state">Loading…</div>';
+    fetch('/admin-user-detail/' + uid + '/')
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) { alert(d.error); closeUserModal(); return; }
+        document.getElementById('mAv').textContent = (d.name || '?').charAt(0).toUpperCase();
+        document.getElementById('mName').textContent = d.name;
+        document.getElementById('mEmail').textContent = d.email + (d.mobile ? ' · ' + d.mobile : '');
+        document.getElementById('mStats').innerHTML =
+            `<span class="badge ${d.is_active ? 'badge-online' : 'badge-offline'}">${d.is_active ? '● Active' : '● Deactivated'}</span>
+             <span class="m-chip">↑ ${d.sent} sent</span>
+             <span class="m-chip">↓ ${d.received} received</span>
+             <span class="m-chip">${d.logins} logins</span>`;
+        const safeName = d.name.replace(/'/g, "\\'");
+        document.getElementById('mActions').innerHTML =
+            `<button class="btn ${d.is_active ? 'btn-maint-on' : 'btn-maint-off'}" onclick="modalToggle(${d.id}, ${d.is_active ? 'false' : 'true'})">
+                <i class="fas fa-power-off"></i> ${d.is_active ? 'Deactivate' : 'Activate'}</button>
+             <button class="btn btn-danger" onclick="deleteUser(${d.id}, '${safeName}')">
+                <i class="fas fa-trash"></i> Delete</button>`;
+        const tb = document.getElementById('mSessions');
+        tb.innerHTML = (d.sessions && d.sessions.length) ? d.sessions.map(s => `
+            <tr>
+                <td><span class="${s.online ? 'dot-online' : 'dot-offline'}"></span>
+                    <span class="badge ${s.online ? 'badge-online' : 'badge-offline'}">${s.online ? 'Online' : 'Off'}</span></td>
+                <td style="text-transform:capitalize">${esc(s.device)}</td>
+                <td>${esc(s.browser)}</td>
+                <td>${esc(s.os)}</td>
+                <td style="font-family:monospace;font-size:11px">${esc(s.ip)}</td>
+                <td style="font-size:11px;color:var(--muted)">${esc(s.login)}</td>
+                <td style="font-size:11px;color:var(--muted)">${esc(s.seen)}</td>
+            </tr>`).join('')
+            : '<tr><td colspan="7" class="empty-state">No login history</td></tr>';
+        const rc = document.getElementById('mRecent');
+        rc.innerHTML = (d.recent && d.recent.length) ? d.recent.map(m => `
+            <div class="m-msg"><span class="m-dir ${m.direction}">${m.direction === 'sent' ? '↑' : '↓'}</span>
+                <div><div class="m-other">${m.direction === 'sent' ? 'to' : 'from'} ${esc(m.other)} · ${esc(m.time)}</div>
+                <div class="m-text">${esc(m.text)}</div></div></div>`).join('')
+            : '<div class="empty-state">No messages yet</div>';
+    })
+    .catch(() => { alert('Failed to load details'); closeUserModal(); });
+}
+function modalToggle(uid, toActive) {
+    postAccess(uid, toActive)
+    .then(d => {
+        if (d.status !== 'ok') { alert(d.message || 'Failed'); return; }
+        refreshRow(uid, d.is_active);
+        openUserDetail(uid);
+    })
+    .catch(() => alert('Request failed'));
+}
+function closeUserModal() {
+    modalUserId = null;
+    document.getElementById('userModal').style.display = 'none';
 }
 
 /* online sessions */
@@ -275,7 +396,7 @@ function loadLogs(level, btn) {
     .catch(() => {});
 }
 
-/* server health */
+/* server health (live, auto-refreshes while tab open) */
 function loadHealth() {
     fetch('/admin-server-health/')
     .then(r => r.json())
@@ -299,10 +420,17 @@ function loadHealth() {
                     <div class="health-value" style="color:${col(d.disk_percent)}">${d.disk_percent}%</div>
                     <div class="health-bar"><div class="health-bar-fill ${bar(d.disk_percent)}" style="width:${d.disk_percent}%"></div></div>
                     <div class="health-sub">${d.disk_used_gb} / ${d.disk_total_gb} GB</div></div>
+                <div class="health-item"><div class="health-label">Uptime</div>
+                    <div class="health-value" style="font-size:18px;">${esc(d.uptime || '—')}</div>
+                    <div class="health-sub">Python ${esc(d.python || '')}</div></div>
             </div>`;
+        document.getElementById('healthUpdated').textContent = 'Live · ' + new Date().toLocaleTimeString();
     })
     .catch(() => {});
 }
+setInterval(() => {
+    if (document.getElementById('tab-server').classList.contains('active')) loadHealth();
+}, 10000);
 
 /* maintenance */
 let maintenanceOn = false;
@@ -317,7 +445,6 @@ function updateMaintUI(isOn) {
 }
 function toggleMaintenance() {
     const next = !maintenanceOn;
-    if (next && !confirm('Enable maintenance mode? Users will see the maintenance screen.')) return;
     fetch('/admin-maintenance/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },

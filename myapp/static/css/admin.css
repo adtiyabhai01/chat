@@ -129,3 +129,62 @@ body::after { width: 380px; height: 380px; background: rgba(56, 189, 248, 0.12);
 
 tr.row-off td { opacity: 0.55; }
 tr.row-off .u-av { background: rgba(15, 23, 42, 0.07); color: var(--muted); }
+
+/* ---------- users page extras ---------- */
+tr.u-row { cursor: pointer; }
+
+.access-select.on { border-color: rgba(5, 150, 105, 0.45); color: #047857; background: var(--success-soft); }
+.access-select.off { border-color: rgba(220, 38, 38, 0.45); color: #b91c1c; background: var(--error-soft); }
+.access-select:disabled { opacity: 0.6; cursor: wait; }
+
+.del-btn {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    background: var(--error-soft); color: #dc2626;
+    font-size: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: transform 0.15s, background 0.2s;
+}
+.del-btn:hover { background: #dc2626; color: #fff; transform: scale(1.08); }
+
+/* user detail modal */
+.umodal-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 18px;
+    animation: gFadeUp 0.2s ease-out;
+}
+.umodal {
+    width: min(640px, 100%); max-height: 88vh; overflow-y: auto;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--stroke-soft);
+    outline: 1px solid var(--stroke); outline-offset: -1px;
+    border-radius: 20px; padding: 24px;
+    box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2);
+}
+.umodal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.icon-x {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    border: 1px solid var(--stroke); background: rgba(255, 255, 255, 0.7);
+    color: var(--sub); font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+.icon-x:hover { color: var(--ink); background: #fff; }
+.m-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.m-chip {
+    font-size: 11px; font-weight: 700; color: var(--ink);
+    background: rgba(15, 23, 42, 0.05);
+    border: 1px solid var(--stroke);
+    padding: 4px 12px; border-radius: 40px;
+}
+.umodal-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.m-recent { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+.m-msg { display: flex; gap: 10px; padding: 10px 12px; background: rgba(255, 255, 255, 0.65); border: 1px solid var(--stroke); border-radius: 12px; }
+.m-dir { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+.m-dir.sent { background: var(--accent-soft); color: var(--accent-deep); }
+.m-dir.received { background: var(--success-soft); color: #047857; }
+.m-other { font-size: 10px; color: var(--faint); font-weight: 600; margin-bottom: 2px; }
+.m-text { font-size: 12px; color: var(--ink); word-break: break-word; }

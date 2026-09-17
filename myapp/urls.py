@@ -42,6 +42,8 @@ urlpatterns = [
     path('admin-dashboard/', RedirectView.as_view(url='/admin/', permanent=False)),
     path('admin-users/', RedirectView.as_view(url='/admin/', permanent=False)),
     path('admin-users/toggle/', views.admin_users_toggle, name='admin_users_toggle'),
+    path('admin-users/delete/', views.admin_users_delete, name='admin_users_delete'),
+    path('admin-user-detail/<int:user_id>/', views.admin_user_detail, name='admin_user_detail'),
     path('access-denied/', views.access_denied, name='access_denied'),
     path('admin-stats/', views.admin_stats, name='admin_stats'),
     path('admin-logs/', views.admin_logs, name='admin_logs'),

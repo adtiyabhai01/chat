@@ -635,6 +635,76 @@ def admin_users_toggle(request):
     return JsonResponse({'status': 'ok', 'is_active': target.is_active})
 
 
+@csrf_exempt
+@admin_required
+def admin_users_delete(request):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    try:
+        target = User.objects.get(id=data.get('user_id'))
+    except (User.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'User not found'}, status=404)
+    if target.id == request.session.get('user_id'):
+        return JsonResponse({'status': 'error', 'message': 'You cannot delete your own account'}, status=400)
+    email = target.email
+    target.delete()  # cascades: messages, chats, sessions, signals
+    logger.info(f'Admin deleted user {email}')
+    return JsonResponse({'status': 'ok'})
+
+
+@admin_required
+def admin_user_detail(request, user_id):
+    try:
+        u = User.objects.get(id=user_id)
+    except (User.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'error': 'User not found'}, status=404)
+    try:
+        sessions = UserSession.objects.filter(user=u).order_by('-last_seen')[:20]
+        sess_data = [
+            {
+                'device': s.device_type or '—',
+                'browser': s.browser or '—',
+                'os': s.os or '—',
+                'ip': s.ip_address or 'N/A',
+                'online': s.is_online,
+                'login': s.login_time.strftime('%Y-%m-%d %H:%M'),
+                'seen': s.last_seen.strftime('%Y-%m-%d %H:%M'),
+            }
+            for s in sessions
+        ]
+        recent = Message.objects.filter(
+            Q(sender=u) | Q(receiver=u)
+        ).select_related('sender', 'receiver').order_by('-timestamp')[:10]
+        recent_data = [
+            {
+                'direction': 'sent' if m.sender_id == u.id else 'received',
+                'other': m.receiver.name if m.sender_id == u.id else m.sender.name,
+                'text': m.text[:80],
+                'time': m.timestamp.strftime('%Y-%m-%d %H:%M'),
+            }
+            for m in recent
+        ]
+        return JsonResponse({
+            'id': u.id,
+            'name': u.name,
+            'email': u.email,
+            'mobile': u.mobile or '',
+            'is_active': u.is_active,
+            'sent': Message.objects.filter(sender=u).count(),
+            'received': Message.objects.filter(receiver=u).count(),
+            'logins': UserSession.objects.filter(user=u).count(),
+            'sessions': sess_data,
+            'recent': recent_data,
+        })
+    except Exception as e:
+        logger.error(f'User detail error: {e}')
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 # ── Standalone Admin Console (/admin/) ─────────────────────────────────────
 # Single admin page with its own username/password login, separate from
 # the chat user sessions.
@@ -792,9 +862,12 @@ def admin_online_users(request):
 def admin_server_health(request):
     try:
         import psutil
+        import platform
         cpu = psutil.cpu_percent(interval=0.5)
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
+        up_secs = int(time.time() - psutil.boot_time())
+        up = f"{up_secs // 86400}d {(up_secs % 86400) // 3600}h {(up_secs % 3600) // 60}m"
         return JsonResponse({
             'cpu_percent': cpu,
             'memory_percent': mem.percent,
@@ -803,6 +876,8 @@ def admin_server_health(request):
             'disk_percent': disk.percent,
             'disk_used_gb': round(disk.used / 1024 / 1024 / 1024, 1),
             'disk_total_gb': round(disk.total / 1024 / 1024 / 1024, 1),
+            'uptime': up,
+            'python': platform.python_version(),
         })
     except ImportError:
         return JsonResponse({'error': 'psutil not installed. Run: pip install psutil'}, status=500)
