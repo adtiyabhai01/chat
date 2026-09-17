@@ -773,3 +773,12 @@ body::before, body::after { display: none !important; content: none !important; 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ===== Mobile keyboard stability =====
+   16px inputs stop iOS auto-zoom (which shoves the header up),
+   fixed body stops page scroll behind the keyboard. */
+@media (max-width: 768px) {
+  body { position: fixed; inset: 0; width: 100%; }
+  #messageInput, #searchInput { font-size: 16px; }
+  .messages-container { overscroll-behavior: contain; }
+}
