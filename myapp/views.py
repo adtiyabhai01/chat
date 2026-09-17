@@ -310,7 +310,7 @@ def _recent_map(user, limit=300):
                 text = 'You: ' + text
             ts = m.timestamp
             if ts.date() == today:
-                when = ts.strftime('%H:%M')
+                when = _t12(ts)
             elif ts.date() == today - timedelta(days=1):
                 when = 'Yesterday'
             else:
@@ -516,7 +516,7 @@ def get_messages(request, user_id):
                 "id": msg.id,
                 "sender": msg.sender_id,
                 "message": msg.text,
-                "time": msg.timestamp.strftime("%H:%M"),
+                "time": _t12(msg.timestamp),
                 "date": msg.timestamp.strftime("%Y-%m-%d"),
                 "is_read": msg.is_read
             }

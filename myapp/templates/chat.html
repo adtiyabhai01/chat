@@ -331,7 +331,7 @@
         // Optimistic: show the bubble instantly with a temp id. On success the
         // temp bubble is dropped and the next server sync paints the real one,
         // so slow/out-of-order responses can never duplicate or lose messages.
-        const nowTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const nowTime = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
         const tmpId = 'tmp-' + Date.now().toString(36) + Math.floor(Math.random() * 1e6);
         appendMessage(message, 'sent', nowTime, false, tmpId, todayISO());
         const optimistic = messagesContainer.lastElementChild;
@@ -494,10 +494,21 @@
 
     // Instagram-style bubble: text + time/tick float together inside
     // the bubble (bottom-right corner), not on a separate line below.
+    // Always 12-hour: "14:30" -> "2:30 PM", "02:30 PM" -> "2:30 PM".
     function shortTime(raw) {
         if (!raw) return '';
-        const m = String(raw).match(/(\d{1,2}):(\d{2})/);
-        return m ? `${m[1].padStart(2, '0')}:${m[2]}` : String(raw);
+        const s = String(raw).trim();
+        let m = s.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP]M)/i);
+        if (m) {
+            const h = (parseInt(m[1], 10) % 12) || 12;
+            return `${h}:${m[2]} ${m[3].toUpperCase()}`;
+        }
+        m = s.match(/(\d{1,2}):(\d{2})/);
+        if (!m) return s;
+        let h = parseInt(m[1], 10);
+        const ap = h >= 12 ? 'PM' : 'AM';
+        h = (h % 12) || 12;
+        return `${h}:${m[2]} ${ap}`;
     }
 
     function appendMessage(text, type, time, isRead, mid, date) {
