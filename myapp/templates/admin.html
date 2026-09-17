@@ -74,9 +74,9 @@
     <!-- OVERVIEW -->
     <div class="tab-pane active" id="tab-overview">
         <div class="stats-grid">
-            <div class="stat-card"><h3>Total Users</h3><div class="stat-value">{{ stats.total_users }}</div><div class="stat-sub">Registered</div></div>
-            <div class="stat-card stat-online"><h3>Active</h3><div class="stat-value">{{ stats.active }}</div><div class="stat-sub">Can log in</div></div>
-            <div class="stat-card stat-err"><h3>Deactivated</h3><div class="stat-value">{{ stats.off }}</div><div class="stat-sub">Blocked</div></div>
+            <div class="stat-card"><h3>Total Users</h3><div class="stat-value" id="ovTotal">{{ stats.total_users }}</div><div class="stat-sub">Registered</div></div>
+            <div class="stat-card stat-online"><h3>Active</h3><div class="stat-value" id="ovActive">{{ stats.active }}</div><div class="stat-sub">Can log in</div></div>
+            <div class="stat-card stat-err"><h3>Deactivated</h3><div class="stat-value" id="ovOff">{{ stats.off }}</div><div class="stat-sub">Blocked</div></div>
             <div class="stat-card stat-online"><h3>Online Now</h3><div class="stat-value">{{ stats.online }}</div><div class="stat-sub">Active sessions</div></div>
             <div class="stat-card stat-msg"><h3>Messages</h3><div class="stat-value">{{ stats.messages }}</div><div class="stat-sub">All time</div></div>
             <div class="stat-card"><h3>Last 24h</h3><div class="stat-value">{{ stats.recent }}</div><div class="stat-sub">Recent activity</div></div>
@@ -100,7 +100,8 @@
         <div class="section">
             <div class="section-header">
                 <div class="section-title"><i class="fas fa-users"></i> All Users</div>
-                <div style="display:flex;gap:8px;align-items:center;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <button class="btn btn-secondary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New user</button>
                     <input id="userSearch" class="users-search" type="text" placeholder="Search name or email…">
                     <div class="colfilter-wrap">
                         <button class="btn btn-secondary" title="Choose columns" onclick="document.getElementById('colFilterMenu').classList.toggle('show')"><i class="fas fa-filter"></i></button>
@@ -197,6 +198,21 @@
         </div>
     </div>
 
+</div>
+
+<!-- CREATE CREDENTIALS MODAL -->
+<div id="createModal" class="umodal-overlay" style="display:none;" onclick="if(event.target===this)closeCreateModal()">
+    <div class="umodal" style="max-width:400px;">
+        <div class="umodal-head">
+            <div class="u-name" style="font-size:16px;">Create credentials</div>
+            <button class="icon-x" onclick="closeCreateModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:10px 0 14px;">Just username + password. The user logs in with the username.</p>
+        <input class="ig-input" id="nuName" type="text" placeholder="Username" autocomplete="off">
+        <input class="ig-input" id="nuPass" type="password" placeholder="Password" autocomplete="new-password" style="margin-top:8px;">
+        <p id="nuErr" style="min-height:16px;font-size:12px;font-weight:600;color:#dc2626;margin:6px 0;"></p>
+        <button class="ig-btn" onclick="submitCreate()">Create user</button>
+    </div>
 </div>
 
 <!-- USER DETAIL MODAL -->
@@ -332,18 +348,29 @@ function refreshRow(uid, isActive) {
 }
 function toggleAccess(uid, sel) {
     const toActive = sel.value === '1';
+    const badgeEl = document.getElementById('badge-' + uid);
+    const wasActive = badgeEl && badgeEl.textContent.trim() === 'Active';
     sel.disabled = true;
     postAccess(uid, toActive)
     .then(d => {
         sel.disabled = false;
         if (d.status !== 'ok') { alert(d.message || 'Failed'); location.reload(); return; }
         refreshRow(uid, d.is_active);
+        if (wasActive !== d.is_active) bumpOverview(0, d.is_active ? 1 : -1, d.is_active ? -1 : 1);
         if (modalUserId === uid) openUserDetail(uid);
     })
     .catch(() => { alert('Request failed'); location.reload(); });
 }
 
-/* delete user (destructive -> keep confirm) */
+function bumpOverview(dT, dA, dO) {
+    const map = { ovTotal: dT, ovActive: dA, ovOff: dO };
+    for (const [id, d] of Object.entries(map)) {
+        const e = document.getElementById(id);
+        if (e && d) e.textContent = (+e.textContent || 0) + d;
+    }
+}
+
+/* delete user — stays on the same page, no reload */
 function deleteUser(uid, name) {
     if (!confirm('Permanently delete "' + name + '" and ALL their messages? This cannot be undone.')) return;
     fetch('/admin-users/delete/', {
@@ -354,10 +381,108 @@ function deleteUser(uid, name) {
     .then(r => r.json())
     .then(d => {
         if (d.status !== 'ok') { alert(d.message || 'Failed'); return; }
+        const row = document.getElementById('row-' + uid);
+        const wasActive = row && row.querySelector('.access-select')?.value === '1';
         if (modalUserId === uid) closeUserModal();
-        location.reload();
+        if (row) row.remove();
+        bumpOverview(-1, wasActive ? -1 : 0, wasActive ? 0 : -1);
     })
     .catch(() => alert('Request failed'));
+}
+
+/* create credentials (username + password only) */
+function openCreateModal() {
+    document.getElementById('nuErr').textContent = '';
+    document.getElementById('createModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('nuName').focus(), 50);
+}
+function closeCreateModal() {
+    document.getElementById('createModal').style.display = 'none';
+}
+function submitCreate() {
+    const name = document.getElementById('nuName').value.trim();
+    const pw = document.getElementById('nuPass').value;
+    const err = document.getElementById('nuErr');
+    if (!name || !pw) { err.textContent = 'Enter both username and password.'; return; }
+    fetch('/admin-users/create/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ username: name, password: pw })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.status !== 'ok') { err.textContent = d.message || 'Failed'; return; }
+        closeCreateModal();
+        document.getElementById('nuName').value = '';
+        document.getElementById('nuPass').value = '';
+        prependUserRow(d.user);
+        bumpOverview(1, 1, 0);
+    })
+    .catch(() => { err.textContent = 'Request failed'; });
+}
+function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+}
+function applySavedCols() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('adminCols') || '{}'); } catch (e) {}
+    COL_LABELS.forEach((_, i) => { if (saved[i] === false) setCol(i, false); });
+}
+function prependUserRow(u) {
+    const tb = document.querySelector('#usersTable tbody');
+    if (!tb) return;
+    const emptyRow = tb.querySelector('td.empty-state');
+    if (emptyRow) emptyRow.closest('tr').remove();
+    const tr = el('tr', 'u-row');
+    tr.id = 'row-' + u.id;
+    tr.addEventListener('click', () => openUserDetail(u.id));
+    const tdS = el('td');
+    tdS.style.whiteSpace = 'nowrap';
+    const dot = el('span', 'dot-online'); dot.id = 'dot-' + u.id;
+    const badge = el('span', 'badge badge-online', 'Active'); badge.id = 'badge-' + u.id;
+    tdS.append(dot, document.createTextNode(' '), badge);
+    tr.appendChild(tdS);
+    const tdU = el('td');
+    const cell = el('div', 'u-cell');
+    cell.appendChild(el('div', 'u-av', (u.name || '?').charAt(0).toUpperCase()));
+    const nm = el('div', 'u-name', u.name + ' ');
+    const cpb = el('button', 'copy-btn'); cpb.title = 'Copy username';
+    cpb.innerHTML = '<i class="fas fa-copy"></i>';
+    cpb.addEventListener('click', ev => { ev.stopPropagation(); copyText(u.name, cpb); });
+    nm.appendChild(cpb); cell.appendChild(nm); tdU.appendChild(cell); tr.appendChild(tdU);
+    const tdE = el('td', 'u-email', u.email + ' ');
+    const cpe = el('button', 'copy-btn'); cpe.title = 'Copy email';
+    cpe.innerHTML = '<i class="fas fa-copy"></i>';
+    cpe.addEventListener('click', ev => { ev.stopPropagation(); copyText(u.email, cpe); });
+    tdE.appendChild(cpe); tr.appendChild(tdE);
+    tr.appendChild(el('td', null, u.mobile || '—'));
+    const tdP = el('td'); tdP.style.whiteSpace = 'nowrap';
+    tdP.append(el('span', 'pw-cell', u.password), document.createTextNode(' '));
+    const cpp = el('button', 'copy-btn'); cpp.title = 'Copy password';
+    cpp.innerHTML = '<i class="fas fa-copy"></i>';
+    cpp.addEventListener('click', ev => { ev.stopPropagation(); copyText(u.password, cpp); });
+    tdP.appendChild(cpp); tr.appendChild(tdP);
+    tr.appendChild(el('td', null, '0'));
+    const tdL = el('td', null, 'Never');
+    tdL.style.cssText = 'color:var(--muted);font-size:11px;white-space:nowrap';
+    tr.appendChild(tdL);
+    const tdA = el('td');
+    const selA = document.createElement('select');
+    selA.className = 'access-select on';
+    selA.innerHTML = '<option value="1" selected>● Active</option><option value="0">● Deactivated</option>';
+    selA.addEventListener('click', ev => ev.stopPropagation());
+    selA.addEventListener('change', () => toggleAccess(u.id, selA));
+    tdA.appendChild(selA); tr.appendChild(tdA);
+    const tdD = el('td');
+    const del = el('button', 'del-btn'); del.title = 'Delete user';
+    del.innerHTML = '<i class="fas fa-trash"></i>';
+    del.addEventListener('click', ev => { ev.stopPropagation(); deleteUser(u.id, u.name); });
+    tdD.appendChild(del); tr.appendChild(tdD);
+    tb.prepend(tr);
+    applySavedCols();
 }
 
 /* user detail modal */

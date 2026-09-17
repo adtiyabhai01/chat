@@ -645,6 +645,43 @@ def admin_users_toggle(request):
 
 @csrf_exempt
 @admin_required
+def admin_users_create(request):
+    """Create login credentials with just username + password.
+
+    Email is auto-derived (login works with the username anyway).
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+    if not username or not password:
+        return JsonResponse({'status': 'error', 'message': 'Username and password required'}, status=400)
+    if User.objects.filter(name__iexact=username).exists():
+        return JsonResponse({'status': 'error', 'message': 'Username already exists'}, status=400)
+    email = f"{username}@dashsocial.local"
+    n = 2
+    while User.objects.filter(email__iexact=email).exists():
+        email = f"{username}+{n}@dashsocial.local"
+        n += 1
+    try:
+        u = User(name=username, email=email, mobile=0, password=password)
+        u.save()
+    except Exception as e:
+        logger.error(f'Admin create user failed: {e}')
+        return JsonResponse({'status': 'error', 'message': 'Could not create user'}, status=500)
+    logger.info(f'Admin created user {username} ({email})')
+    return JsonResponse({'status': 'ok', 'user': {
+        'id': u.id, 'name': u.name, 'email': u.email, 'mobile': '',
+        'password': u.password, 'is_active': True,
+    }})
+
+
+@csrf_exempt
+@admin_required
 def admin_users_delete(request):
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'POST only'}, status=405)
