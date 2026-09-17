@@ -120,6 +120,12 @@ SECURE_SSL_REDIRECT = False
 # SECURE_SSL_REDIRECT = True
 
 # ========================
+# TIMEZONE — India (IST)
+# ========================
+TIME_ZONE = 'Asia/Kolkata'
+USE_TZ = True
+
+# ========================
 # AUTH SETTINGS
 # ========================
 LOGIN_URL = '/login/'

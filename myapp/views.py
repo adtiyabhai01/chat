@@ -17,12 +17,32 @@ from .logging_service import get_logger
 logger = get_logger(__name__)
 
 
+def _ist(ts):
+    """Convert any timestamp to India (IST) aware datetime."""
+    from datetime import timezone as _dt_tz
+    from django.utils import timezone
+    if timezone.is_naive(ts):
+        ts = timezone.make_aware(ts, _dt_tz.utc)
+    return timezone.localtime(ts)
+
+
 def _t12(ts):
-    """User-facing chat time in 12-hour format: '2:30 PM'."""
+    """User-facing chat time in 12-hour IST format: '2:30 PM'."""
     try:
-        return ts.strftime('%I:%M %p').lstrip('0')
+        return _ist(ts).strftime('%I:%M %p').lstrip('0')
     except Exception:
-        return ''
+        try:
+            return ts.strftime('%I:%M %p').lstrip('0')
+        except Exception:
+            return ''
+
+
+def _ist_date(ts):
+    """IST calendar date for grouping/comparing messages."""
+    try:
+        return _ist(ts).date()
+    except Exception:
+        return ts.date()
 
 
 def custom_login_required(view_func):
@@ -290,7 +310,7 @@ def _recent_map(user, limit=300):
     """Latest message per conversation partner: {user_id: {'text', 'time'}}.
 
     Text is prefixed with 'You: ' for own messages (chat-app style), time is
-    HH:MM for today, 'Yesterday', or 'dd Mon' for older.
+    12-hour IST for today, 'Yesterday', or 'dd Mon' for older.
     """
     from django.utils import timezone
     today = timezone.now().date()
@@ -309,9 +329,9 @@ def _recent_map(user, limit=300):
             if m.sender_id == user.id:
                 text = 'You: ' + text
             ts = m.timestamp
-            if ts.date() == today:
+            if _ist_date(ts) == today:
                 when = _t12(ts)
-            elif ts.date() == today - timedelta(days=1):
+            elif _ist_date(ts) == today - timedelta(days=1):
                 when = 'Yesterday'
             else:
                 when = ts.strftime('%d %b')
@@ -511,18 +531,20 @@ def get_messages(request, user_id):
             Q(sender_id=user_id, receiver_id=current_user_id)
         ).order_by('timestamp')
 
+        from django.utils import timezone
         data = [
             {
                 "id": msg.id,
                 "sender": msg.sender_id,
                 "message": msg.text,
                 "time": _t12(msg.timestamp),
-                "date": msg.timestamp.strftime("%Y-%m-%d"),
+                "date": _ist_date(msg.timestamp).isoformat(),
                 "is_read": msg.is_read
             }
             for msg in messages
         ]
-        return JsonResponse({"messages": data})
+        # IST "today" so day pills (Today/Yesterday) match server dates exactly
+        return JsonResponse({"messages": data, "today": _ist_date(timezone.now()).isoformat()})
     except Exception as e:
         logger.error(f'Error fetching messages: {str(e)}')
         return JsonResponse({"messages": [], "error": str(e)})

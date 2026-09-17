@@ -333,7 +333,9 @@
         // so slow/out-of-order responses can never duplicate or lose messages.
         const nowTime = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
         const tmpId = 'tmp-' + Date.now().toString(36) + Math.floor(Math.random() * 1e6);
-        appendMessage(message, 'sent', nowTime, false, tmpId, todayISO());
+        // NOTE: no date passed — the pill comes from the server sync only.
+        // Passing the browser date here created duplicate/extra day pills.
+        appendMessage(message, 'sent', nowTime, false, tmpId, null);
         const optimistic = messagesContainer.lastElementChild;
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
         messageInput.value = '';
@@ -383,12 +385,22 @@
     }
 
     let lastMsgDate = '';
+    // Server IST "today" (from get-messages) — single source of truth for
+    // Today/Yesterday labels so browser/server timezone can never disagree.
+    let serverToday = '';
 
     function localISO(d) {
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
-    function todayISO() { return localISO(new Date()); }
-    function yesterdayISO() { return localISO(new Date(Date.now() - 864e5)); }
+    function todayISO() { return serverToday || localISO(new Date()); }
+    function yesterdayISO() {
+        const base = serverToday ? serverToday.split('-') : null;
+        const d = base
+            ? new Date(+base[0], +base[1] - 1, +base[2])
+            : new Date();
+        d.setDate(d.getDate() - 1);
+        return localISO(d);
+    }
 
     // Instagram-style day separators: Today / Yesterday / 12 Sep 2026
     function dateLabel(iso) {
@@ -400,13 +412,20 @@
         return isNaN(d) ? iso : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
     }
 
-    function appendDatePill(iso) {
+    function appendDatePill(iso, beforeNode) {
         if (!iso || !messagesContainer) return;
+        // Idempotent: never stack two pills for the same day
+        const prev = beforeNode ? beforeNode.previousElementSibling : messagesContainer.lastElementChild;
+        if (prev && prev.classList?.contains('date-pill') && prev.dataset.date === iso) {
+            lastMsgDate = iso;
+            return;
+        }
         const pill = document.createElement('div');
         pill.className = 'date-pill';
         pill.dataset.date = iso;
         pill.textContent = dateLabel(iso);
-        messagesContainer.appendChild(pill);
+        if (beforeNode) messagesContainer.insertBefore(pill, beforeNode);
+        else messagesContainer.appendChild(pill);
     }
 
     // Keep the sidebar preview (text + time) fresh without reload
@@ -436,6 +455,7 @@
             if (!messagesContainer) return;
             const messages = data.messages || data;
             if (!Array.isArray(messages)) return;
+            if (data.today) serverToday = data.today;
             const serverIds = new Set(messages.map(m => String(m.id)));
 
             const hasTemp = [...renderedIds].some(id => id.startsWith('tmp-'));
@@ -515,11 +535,6 @@
         if (!messagesContainer) return;
         messagesContainer.querySelector('.no-chat-selected')?.remove();
 
-        if (date && date !== lastMsgDate) {
-            lastMsgDate = date;
-            appendDatePill(date);
-        }
-
         const wrap = document.createElement('div');
         wrap.className = `msg-wrap ${type}`;
         if (mid !== undefined && mid !== null) wrap.dataset.mid = String(mid);
@@ -556,6 +571,12 @@
         bubble.appendChild(side);
         wrap.appendChild(bubble);
         messagesContainer.appendChild(wrap);
+        // Pill goes right before its first message — always correct order,
+        // even if an optimistic bubble is sitting at the end.
+        if (date && date !== lastMsgDate) {
+            lastMsgDate = date;
+            appendDatePill(date, wrap);
+        }
         if (mid !== undefined && mid !== null) renderedIds.add(String(mid));
     }
 
