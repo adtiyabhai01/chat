@@ -97,7 +97,7 @@
                     <span><span id="typingName"></span> is typing…</span>
                 </div>
             </div>
-            <div class="chat-actions">
+            <div class="chat-actions" id="callActions" style="display:none;">
                 <button class="icon-btn" title="Voice call" onclick="startCall('voice')"><i class="fas fa-phone"></i></button>
                 <button class="icon-btn" title="Video call" onclick="startCall('video')"><i class="fas fa-video"></i></button>
             </div>
@@ -285,6 +285,8 @@
         st.style.display = '';
         document.getElementById('typingIndicator').classList.remove('visible');
         if (messageInput) { messageInput.disabled = false; messageInput.placeholder = `Message ${username || 'user'}…`; }
+        // Show call buttons only once a conversation is selected
+        document.getElementById('callActions').style.display = '';
         if (messagesContainer) messagesContainer.innerHTML = '';
         renderedIds = new Set(); tickById = {};
         toggleSendState();
