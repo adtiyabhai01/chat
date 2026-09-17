@@ -48,29 +48,6 @@
                 </div>
 
                 <div>
-                    <div class="section-label">Quick Actions</div>
-                    <div class="tiles">
-                        <a href="{% url 'chat' %}" class="tile tile-chat">
-                            <div class="tile-icon"><i class="fas fa-comment-dots"></i></div>
-                            <div><div class="tile-label">Messages</div><div class="tile-desc">Open your conversations</div></div>
-                            <i class="fas fa-arrow-up-right tile-arrow"></i>
-                        </a>
-                        {% if request.session.is_admin %}
-                        <a href="{% url 'admin_dashboard' %}" class="tile" style="border-color:rgba(139,92,246,0.25);">
-                            <div class="tile-icon" style="background:rgba(139,92,246,0.12);color:#a78bfa;"><i class="fas fa-chart-line"></i></div>
-                            <div><div class="tile-label">Admin Panel</div><div class="tile-desc">Users, logs & server health</div></div>
-                            <i class="fas fa-arrow-up-right tile-arrow"></i>
-                        </a>
-                        {% endif %}
-                        <a href="{% url 'logout_view' %}" class="tile tile-out">
-                            <div class="tile-icon"><i class="fas fa-sign-out-alt"></i></div>
-                            <div><div class="tile-label">Sign Out</div><div class="tile-desc">End your session safely</div></div>
-                            <i class="fas fa-arrow-up-right tile-arrow"></i>
-                        </a>
-                    </div>
-                </div>
-
-                <div>
                     <div class="section-label">At a Glance</div>
                     <div class="stats-row">
                         <div class="stat-mini">
@@ -130,21 +107,7 @@
                     </div>
                     <div class="info-row">
                         <div class="info-row-l">
-                            <div class="info-icon" style="background:rgba(16,185,129,0.12);color:#34d399;"><i class="fas fa-circle"></i></div>
-                            <div><div class="info-lbl">Status</div><div class="info-val">Active</div></div>
-                        </div>
-                        <span class="badge" style="background:rgba(16,185,129,0.12);color:#34d399;">Online</span>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-row-l">
-                            <div class="info-icon" style="background:rgba(59,130,246,0.12);color:#60a5fa;"><i class="fas fa-shield-alt"></i></div>
-                            <div><div class="info-lbl">Security</div><div class="info-val">End-to-end</div></div>
-                        </div>
-                        <span class="badge" style="background:rgba(59,130,246,0.12);color:#60a5fa;">Secure</span>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-row-l">
-                            <div class="info-icon" style="background:rgba(245,158,11,0.12);color:#fbbf24;"><i class="fas fa-calendar-alt"></i></div>
+                            <div class="info-icon" style="background:rgba(217,119,6,0.1);color:#d97706;"><i class="fas fa-calendar-alt"></i></div>
                             <div><div class="info-lbl">Today</div><div class="info-val" id="sideDate">—</div></div>
                         </div>
                     </div>
