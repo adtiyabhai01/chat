@@ -774,6 +774,7 @@ def admin_console(request):
                 'name': u.name,
                 'email': u.email,
                 'mobile': u.mobile or '',
+                'password': u.password,
                 'is_active': u.is_active,
                 'messages': Message.objects.filter(Q(sender=u) | Q(receiver=u)).count(),
                 'is_online': sess.is_online if sess else False,
