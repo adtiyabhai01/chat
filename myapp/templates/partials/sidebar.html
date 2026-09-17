@@ -3,8 +3,9 @@
     <a href="{% url 'home' %}" class="rail-logo">D</a>
     <a href="{% url 'home' %}" class="rail-btn{% if active == 'home' %} active{% endif %}"><i class="fas fa-home"></i><span class="rail-tip">Home</span></a>
     <a href="{% url 'chat' %}" class="rail-btn{% if active == 'chat' %} active{% endif %}"><i class="fas fa-comment-dots"></i><span class="rail-tip">Messages</span></a>
-    <a href="{% url 'show_logs' %}" class="rail-btn{% if active == 'activity' %} active{% endif %}"><i class="fas fa-history"></i><span class="rail-tip">Activity</span></a>
+    {% if request.session.is_admin or request.session.admin_auth %}
     <a href="{% url 'admin_console' %}" class="rail-btn{% if active == 'admin' %} active{% endif %}"><i class="fas fa-user-shield"></i><span class="rail-tip">Admin</span></a>
+    {% endif %}
     <div class="rail-spacer"></div>
     <a href="{% url 'logout_view' %}" class="rail-btn"><i class="fas fa-sign-out-alt"></i><span class="rail-tip">Sign Out</span></a>
 </aside>
