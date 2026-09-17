@@ -125,6 +125,9 @@ def signup(request):
             missing = [f for f, v in (("Name", name), ("Email", email), ("Password", password)) if not v]
             return render(request, 'signup.html', {'msg': "Please fill: " + ", ".join(missing)})
 
+        if name.strip().lower() in RESERVED_USERNAMES:
+            return render(request, 'signup.html', {'msg': "This username is reserved. Please choose another."})
+
         if User.objects.filter(email=email).exists():
             logger.warning(f'Signup attempt with existing email: {email}')
             return render(request, 'signup.html', {'msg': "Email already exists"})
@@ -174,6 +177,9 @@ def signup_desh(request):
 
 def _track_login_session(request, user):
     """Shared login bookkeeping: session keys + device tracking. Used by login & signup."""
+    # Chat login is separate from console admin: never leak the admin tab in.
+    request.session.pop('admin_auth', None)
+    request.session.pop('admin_user', None)
     request.session['email'] = user.email
     request.session['profile'] = user.profile_image.url if user.profile_image else ''
     request.session['is_logged_in'] = True
@@ -205,6 +211,10 @@ def _track_login_session(request, user):
         )
     except Exception as e:
         logger.error(f'Session tracking error: {e}')
+
+
+# Usernames nobody may register (they'd clash with the admin console's identity)
+RESERVED_USERNAMES = {'admin', 'administrator', 'root', 'system', 'support', 'moderator', 'mod', 'help', 'dashsocial', 'official', 'service'}
 
 
 @csrf_exempt
@@ -660,6 +670,8 @@ def admin_users_create(request):
     password = data.get('password') or ''
     if not username or not password:
         return JsonResponse({'status': 'error', 'message': 'Username and password required'}, status=400)
+    if username.lower() in RESERVED_USERNAMES:
+        return JsonResponse({'status': 'error', 'message': 'Username is reserved'}, status=400)
     if User.objects.filter(name__iexact=username).exists():
         return JsonResponse({'status': 'error', 'message': 'Username already exists'}, status=400)
     email = f"{username}@dashsocial.local"

@@ -87,6 +87,7 @@
     <!-- ============ Thread ============ -->
     <main class="chat-area" id="chatArea">
         <header class="chat-header" id="chatHeader">
+            <button class="icon-btn menu-btn" id="menuBtn" aria-label="Chats" onclick="openSidebar()"><i class="fas fa-bars"></i></button>
             <button class="mobile-back-btn" id="mobileBackBtn" aria-label="Back"><i class="fas fa-arrow-left"></i></button>
             <img src="https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true" alt="Avatar" class="contact-avatar" id="contactAvatar">
             <div class="contact-info">
@@ -215,6 +216,9 @@
         if (openId) {
             const item = document.getElementById(`badge-${openId}`)?.closest('.chat-item');
             if (item) item.click();
+        } else if (window.innerWidth <= 768) {
+            // Mobile with no open chat: show the list so a chat can be picked
+            document.getElementById('sidebar')?.classList.add('active');
         }
     });
 
@@ -432,6 +436,14 @@
         .finally(() => { pollInflight = false; clearTimeout(timer); });
     }
 
+    // Instagram-style bubble: text + time/tick float together inside
+    // the bubble (bottom-right corner), not on a separate line below.
+    function shortTime(raw) {
+        if (!raw) return '';
+        const m = String(raw).match(/(\d{1,2}):(\d{2})/);
+        return m ? `${m[1].padStart(2, '0')}:${m[2]}` : String(raw);
+    }
+
     function appendMessage(text, type, time, isRead, mid) {
         if (!messagesContainer) return;
         messagesContainer.querySelector('.no-chat-selected')?.remove();
@@ -442,34 +454,35 @@
 
         const bubble = document.createElement('div');
         bubble.className = `message message-${type}`;
-        bubble.innerText = text;
-        wrap.appendChild(bubble);
 
-        const meta = document.createElement('div');
-        meta.className = 'msg-meta';
+        const txt = document.createElement('span');
+        txt.className = 'msg-text';
+        txt.innerText = text;
+        bubble.appendChild(txt);
 
-        if (time) {
+        const side = document.createElement('span');
+        side.className = 'msg-side';
+
+        const stamp = shortTime(time);
+        if (stamp) {
             const t = document.createElement('span');
-            t.textContent = time;
-            meta.appendChild(t);
+            t.className = 'msg-time';
+            t.textContent = stamp;
+            side.appendChild(t);
         }
 
         if (type === 'sent') {
             const tick = document.createElement('i');
-            if (isRead) {
-                tick.className = 'fas fa-check-double tick read';
-                tick.title = 'Read';
-            } else {
-                tick.className = 'fas fa-check tick sent-only';
-                tick.title = 'Sent';
-            }
-            meta.appendChild(tick);
+            tick.className = isRead ? 'fas fa-check-double tick read' : 'fas fa-check tick sent-only';
+            tick.title = isRead ? 'Read' : 'Sent';
+            side.appendChild(tick);
             if (mid !== undefined && mid !== null && !String(mid).startsWith('tmp-')) {
                 tickById[String(mid)] = tick;
             }
         }
 
-        wrap.appendChild(meta);
+        bubble.appendChild(side);
+        wrap.appendChild(bubble);
         messagesContainer.appendChild(wrap);
         if (mid !== undefined && mid !== null) renderedIds.add(String(mid));
     }
@@ -509,9 +522,20 @@
         const mobileBackBtn = document.getElementById('mobileBackBtn');
         const overlay = document.getElementById('sidebarOverlay');
 
-        mobileBackBtn?.addEventListener('click', () => {
+        // Open / close the conversation list on mobile
+        window.openSidebar = function(withOverlay = true) {
+            if (window.innerWidth > 768 || !sidebar) return;
             sidebar.classList.add('active');
+            if (overlay && withOverlay) overlay.style.display = 'block';
+        };
+        window.closeSidebar = function() {
+            sidebar?.classList.remove('active');
             if (overlay) overlay.style.display = 'none';
+        };
+
+        mobileBackBtn?.addEventListener('click', () => {
+            // "Back" means back to the list
+            window.openSidebar(false);
             document.getElementById('chatArea').classList.remove('chat-open');
         });
 

@@ -496,7 +496,9 @@ body::before, body::after { display: none !important; content: none !important; 
   margin: 0;
 }
 
-/* bubbles */
+/* bubbles — Instagram style: time sits inside the bubble, bottom-right */
+.messages-container { gap: 4px; }
+
 .msg-wrap {
   display: flex;
   flex-direction: column;
@@ -506,44 +508,63 @@ body::before, body::after { display: none !important; content: none !important; 
 .msg-wrap.sent { align-self: flex-end; align-items: flex-end; }
 .msg-wrap.received { align-self: flex-start; align-items: flex-start; }
 
+/* breathing room when the sender changes */
+.msg-wrap.sent + .msg-wrap.received,
+.msg-wrap.received + .msg-wrap.sent { margin-top: 8px; }
+
 .message {
-  padding: 10px 14px;
+  padding: 8px 12px;
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.5;
   word-break: break-word;
+  overflow-wrap: anywhere;
   animation: msgIn .18s ease-out;
 }
 
 .message-sent {
   background: #4f46e5;
   color: #fff;
-  border-radius: 16px 16px 4px 16px;
+  border-radius: 18px 18px 5px 18px;
 }
 
 .message-received {
   background: #fff;
   color: #1f2937;
   border: 1px solid #e5e7eb;
-  border-radius: 16px 16px 16px 4px;
+  border-radius: 18px 18px 18px 5px;
   box-shadow: 0 1px 2px rgba(16,24,40,.05);
 }
 
 @keyframes msgIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 
-.msg-meta {
-  display: flex;
+.msg-text { white-space: pre-wrap; }
+
+/* time + ticks: floated corner inside the bubble */
+.msg-side {
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 4px;
-  font-size: 11px;
+  gap: 4px;
+  float: right;
+  margin: 7px -2px 0 10px;
+  font-size: 10.5px;
   font-weight: 500;
-  color: #9ca3af;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
+  user-select: none;
 }
 
-.tick { font-size: 11px; }
-.tick.sent-only { color: #9ca3af; }
-.tick.read { color: #4f46e5; }
+.message-sent .msg-side { color: rgba(255,255,255,.8); }
+.message-received .msg-side { color: #9ca3af; }
+
+.msg-time { letter-spacing: .1px; }
+
+.tick { font-size: 11px; line-height: 1; }
+.message-sent .tick.sent-only { color: rgba(255,255,255,.8); }
+.message-sent .tick.read { color: #7dd3fc; }
+.message-received .tick { display: none; }
+
+/* legacy class kept harmless (old cached JS may still emit it) */
+.msg-meta { display: none; }
 
 /* ================= COMPOSER ================= */
 
@@ -741,7 +762,10 @@ body::before, body::after { display: none !important; content: none !important; 
   .sidebar { width: 320px; min-width: 300px; }
 }
 
+.menu-btn { display: none; }
+
 @media (max-width: 768px) {
+  .menu-btn { display: flex; }
   .sidebar {
     position: fixed;
     left: 0; top: 0; bottom: 0;
