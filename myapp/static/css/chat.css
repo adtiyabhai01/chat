@@ -866,3 +866,19 @@ body::before, body::after { display: none !important; content: none !important; 
   color: #94a3b8; font-size: 13px; font-weight: 500;
   padding: 30px 10px;
 }
+
+/* hover 3-dots menu on own bubbles (desktop) */
+.message-sent.has-menu { position: relative; }
+.msg-menu {
+  position: absolute; top: -13px; right: -6px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: #fff; border: 1px solid rgba(15, 23, 42, 0.1); color: #64748b;
+  font-size: 11px; cursor: pointer;
+  display: none; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  padding: 0;
+}
+.msg-menu:hover { color: #0f172a; border-color: rgba(15, 23, 42, 0.25); }
+@media (hover: hover) {
+  .msg-wrap.sent:hover .msg-menu { display: flex; }
+}

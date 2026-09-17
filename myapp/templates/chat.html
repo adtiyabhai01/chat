@@ -593,6 +593,14 @@
             side.appendChild(tick);
             if (mid !== undefined && mid !== null && !String(mid).startsWith('tmp-')) {
                 tickById[String(mid)] = tick;
+                // Desktop: hover the bubble -> 3-dots menu -> delete sheet
+                const menu = document.createElement('button');
+                menu.className = 'msg-menu';
+                menu.title = 'More';
+                menu.innerHTML = '<i class="fas fa-ellipsis"></i>';
+                menu.addEventListener('click', (ev) => { ev.stopPropagation(); openMsgSheet(String(mid)); });
+                bubble.appendChild(menu);
+                bubble.classList.add('has-menu');
             }
         }
 
@@ -689,7 +697,7 @@
         })
         .then(r => r.json())
         .then(d => {
-            if (d.status === 'success') {
+            if (d.status === 'ok' || d.status === 'success') {
                 document.querySelector(`.msg-wrap[data-mid="${mid}"]`)?.remove();
                 renderedIds.delete(String(mid));
                 delete tickById[String(mid)];
