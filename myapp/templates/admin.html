@@ -127,9 +127,12 @@
                                     </div>
                                 </div>
                             </td>
-                            <td class="u-email">{{ x.email }}</td>
+                            <td class="u-email">{{ x.email }}
+                                <button class="copy-btn" title="Copy email" onclick="event.stopPropagation();copyText('{{ x.email|escapejs }}', this)"><i class="fas fa-copy"></i></button>
+                            </td>
                             <td>{{ x.mobile|default:"—" }}</td>
-                            <td style="white-space:nowrap"><span class="pw-cell">{{ x.password }}</span>
+                            <td style="white-space:nowrap"><span class="pw-cell" id="pw-{{ x.id }}">••••••••</span>
+                                <button class="copy-btn" title="Show / hide password" onclick="event.stopPropagation();togglePw({{ x.id }}, '{{ x.password|escapejs }}', this)"><i class="fas fa-eye"></i></button>
                                 <button class="copy-btn" title="Copy password" onclick="event.stopPropagation();copyText('{{ x.password|escapejs }}', this)"><i class="fas fa-copy"></i></button>
                             </td>
                             <td>{{ x.messages }}</td>
@@ -254,8 +257,7 @@ document.getElementById('userSearch').addEventListener('input', function () {
 });
 
 /* one-tap copy */
-function copyText(t, btn) {
-    const done = () => {
+function copyText(t, btn) {    const done = () => {
         if (btn) {
             btn.classList.add('copied');
             setTimeout(() => btn.classList.remove('copied'), 1200);
@@ -272,6 +274,22 @@ function copyText(t, btn) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(t).then(done).catch(fallback);
     } else fallback();
+}
+
+/* show / hide password in table */
+function togglePw(uid, pw, btn) {
+    const el = document.getElementById('pw-' + uid);
+    if (!el) return;
+    const shown = el.dataset.shown === '1';
+    if (shown) {
+        el.textContent = '••••••••';
+        el.dataset.shown = '0';
+        btn.innerHTML = '<i class="fas fa-eye"></i>';
+    } else {
+        el.textContent = pw;
+        el.dataset.shown = '1';
+        btn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+    }
 }
 
 /* column visibility filter */
