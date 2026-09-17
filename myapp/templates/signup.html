@@ -62,7 +62,7 @@
                 <input class="ig-input" type="tel" name="mobile" placeholder="Mobile number (optional)" maxlength="10" inputmode="numeric">
                 <label class="ig-file">
                     <span id="fileLabel">Add profile photo (optional)</span>
-                    <input type="file" name="profile_image" accept="image/*" hidden onchange="document.getElementById('fileLabel').textContent = this.files[0] ? this.files[0].name : 'Add profile photo (optional)'">
+                    <input type="file" name="profile_image" accept="image/*" hidden>
                 </label>
                 <div class="row-2">
                     <button class="ig-btn ig-btn-soft" type="button" onclick="goStep(2)">Back</button>
@@ -83,6 +83,27 @@
 </main>
 <script>
 let curStep = 1;
+
+// Enter / Go key behaves like Continue instead of submitting halfway
+document.getElementById('signupForm').addEventListener('submit', function (e) {
+    if (curStep < 3) {
+        e.preventDefault();
+        goStep(curStep + 1);
+    }
+});
+
+// Vercel rejects bodies over ~4.5MB — stop huge photos before submit
+document.querySelector('input[name="profile_image"]').addEventListener('change', function () {
+    const f = this.files[0];
+    if (f && f.size > 4 * 1024 * 1024) {
+        this.value = '';
+        document.getElementById('fileLabel').textContent = 'Photo too large (max 4MB) — pick a smaller one';
+    } else if (f) {
+        document.getElementById('fileLabel').textContent = f.name;
+    } else {
+        document.getElementById('fileLabel').textContent = 'Add profile photo (optional)';
+    }
+});
 
 function goStep(n) {
     // validate current step before moving forward

@@ -120,7 +120,10 @@ def signup(request):
         profile_image = request.FILES.get('profile_image')
 
         if not name or not email or not password:
-            return render(request, 'signup.html', {'msg': "Name, email and password are required"})
+            if request.method == "POST" and not request.POST:
+                return render(request, 'signup.html', {'msg': "Submit failed — photo may be too large. Try again without photo."})
+            missing = [f for f, v in (("Name", name), ("Email", email), ("Password", password)) if not v]
+            return render(request, 'signup.html', {'msg': "Please fill: " + ", ".join(missing)})
 
         if User.objects.filter(email=email).exists():
             logger.warning(f'Signup attempt with existing email: {email}')
@@ -133,6 +136,9 @@ def signup(request):
             mobile_int = int(mobile) if mobile else 0
         except ValueError:
             return render(request, 'signup.html', {'msg': "Mobile number must be numeric"})
+
+        if profile_image and profile_image.size > 4 * 1024 * 1024:
+            return render(request, 'signup.html', {'msg': "Photo too large (max 4MB). Try a smaller one or skip it."})
 
         try:
             user = User(
