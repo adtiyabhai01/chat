@@ -3,12 +3,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>DashSocial — Messages</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Messages — DashSocial</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%234f46e5'/><text x='50' y='70' font-size='60' font-family='Arial,sans-serif' font-weight='bold' text-anchor='middle' fill='white'>D</text></svg>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="{% static 'css/glass.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/glass.css' %}">
     <link rel="stylesheet" href="{% static 'css/chat.css' %}">
 </head>
 <body>
@@ -16,54 +16,57 @@
 
     {% include 'partials/sidebar.html' with active='chat' %}
 
-    <!-- Sidebar -->
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <div class="user-info">
-                <div class="avatar-ring">
+    <!-- ============ Conversation list ============ -->
+    <aside class="sidebar" id="sidebar" aria-label="Conversations">
+        <div class="sidebar-top">
+            <div class="page-title-row">
+                <h1 class="page-title">Messages</h1>
+                <button class="compose-btn" title="New message" onclick="document.getElementById('searchInput').focus()">
+                    <i class="fas fa-pen-to-square"></i>
+                </button>
+            </div>
+
+            <div class="me-row">
+                <div class="me-avatar">
                     {% if user.profile_image %}
                         <img src="{{ user.profile_image.url }}" alt="Profile" class="avatar">
                     {% else %}
-                        <div class="avatar-placeholder"><i class="fas fa-user"></i></div>
+                        <div class="avatar-placeholder">{{ user.name|default:"U"|slice:":1" }}</div>
                     {% endif %}
+                    <span class="presence-dot"></span>
                 </div>
-                <div class="user-details">
-                    <h3>{{ user.name|default:"User" }}</h3>
-                    <span class="status online">
-                        <span class="status-dot-live"></span>Active now
-                    </span>
+                <div class="me-meta">
+                    <div class="me-name">{{ user.name|default:"User" }}</div>
+                    <div class="me-status">Active now</div>
                 </div>
             </div>
-            <div class="header-actions">
-                <button class="icon-btn" title="New message"><i class="fas fa-edit"></i></button>
-            </div>
-        </div>
 
-        <div class="search-bar">
             <div class="search-wrap">
                 <i class="fas fa-search"></i>
-                <input type="text" placeholder="Search messages…" id="searchInput">
+                <input type="text" placeholder="Search people…" id="searchInput" autocomplete="off">
+            </div>
+
+            <div class="conv-tabs" role="tablist">
+                <button class="conv-tab is-active" data-filter="all" type="button">All</button>
+                <button class="conv-tab" data-filter="unread" type="button">Unread <span class="tab-count" id="unreadTotal" hidden></span></button>
             </div>
         </div>
-
-        <div class="section-label">Messages</div>
 
         <div class="chat-list" id="chatList" role="list">
             {% for u in users %}
-                <div class="chat-item" role="listitem"
-                     onclick="openChat('{{ u.id }}', '{{ u.name|escapejs }}', '{% if u.profile_image %}{{ u.profile_image.url }}{% else %}https://ui-avatars.com/api/?background=7c3aed&color=fff&size=56&name={{ u.name|urlencode }}{% endif %}')">
+                <div class="chat-item" role="listitem" tabindex="0" data-name="{{ u.name|lower }}"
+                     onclick="openChat('{{ u.id }}', '{{ u.name|escapejs }}', '{% if u.profile_image %}{{ u.profile_image.url }}{% else %}https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}{% endif %}')">
                     <div class="chat-avatar">
                         {% if u.profile_image %}
                             <img src="{{ u.profile_image.url }}" alt="{{ u.name }}">
                         {% else %}
-                            <img src="https://ui-avatars.com/api/?background=7c3aed&color=fff&size=56&name={{ u.name|urlencode }}" alt="{{ u.name }}">
+                            <img src="https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}" alt="{{ u.name }}">
                         {% endif %}
-                        <span class="online-indicator"></span>
                     </div>
                     <div class="chat-info">
                         <div class="chat-name">
                             <h4>{{ u.name }}</h4>
-                            <span class="chat-time">now</span>
+                            <span class="chat-time" data-time>now</span>
                         </div>
                         <div class="chat-bottom">
                             <div class="last-message">Tap to start chatting</div>
@@ -72,59 +75,58 @@
                     </div>
                 </div>
             {% empty %}
-                <div class="no-chats"><p>No users found</p></div>
+                <div class="no-chats">
+                    <div class="no-chats-icon"><i class="fas fa-user-group"></i></div>
+                    <p class="no-chats-title">No people yet</p>
+                    <p class="no-chats-sub">When someone joins, they'll show up here.</p>
+                </div>
             {% endfor %}
         </div>
-    </div>
+    </aside>
 
-    <!-- Chat Area -->
-    <div class="chat-area" id="chatArea">
-        <div class="chat-header" id="chatHeader">
-            <button class="mobile-back-btn" id="mobileBackBtn"><i class="fas fa-arrow-left"></i></button>
-            <img src="https://ui-avatars.com/api/?background=7c3aed&color=fff" alt="Avatar" class="contact-avatar" id="contactAvatar">
+    <!-- ============ Thread ============ -->
+    <main class="chat-area" id="chatArea">
+        <header class="chat-header" id="chatHeader">
+            <button class="mobile-back-btn" id="mobileBackBtn" aria-label="Back"><i class="fas fa-arrow-left"></i></button>
+            <img src="https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true" alt="Avatar" class="contact-avatar" id="contactAvatar">
             <div class="contact-info">
-                <h3 id="contactName">DashSocial</h3>
+                <h3 id="contactName">Select a conversation</h3>
+                <span class="contact-status" id="contactStatus">Choose someone from the list to start messaging</span>
                 <div class="typing-indicator" id="typingIndicator">
-                    <div class="typing-dots"><span></span><span></span><span></span></div>
-                    <span id="typingName"></span> is typing…
+                    <span class="typing-dots"><span></span><span></span><span></span></span>
+                    <span><span id="typingName"></span> is typing…</span>
                 </div>
-                <span class="contact-status" id="contactStatus"></span>
             </div>
             <div class="chat-actions">
                 <button class="icon-btn" title="Voice call" onclick="startCall('voice')"><i class="fas fa-phone"></i></button>
                 <button class="icon-btn" title="Video call" onclick="startCall('video')"><i class="fas fa-video"></i></button>
-                <button class="icon-btn" title="Admin" onclick="window.location.href='/admin-dashboard/'"><i class="fas fa-cog"></i></button>
             </div>
-        </div>
+        </header>
 
         <div class="messages-container" id="messagesContainer" role="log" aria-live="polite">
             <div class="no-chat-selected">
-                <div class="icon-wrapper"><i class="fas fa-comment-dots"></i></div>
-                <h3>Your Messages</h3>
-                <p>Select a conversation or start a new one.</p>
-                <button class="cta-btn" onclick="document.getElementById('sidebar').classList.add('active')">
-                    <i class="fas fa-pen" style="margin-right:8px"></i>New Message
-                </button>
+                <div class="empty-art"><i class="fas fa-comments"></i></div>
+                <h3>Your messages</h3>
+                <p>Pick a person on the left to view the conversation.<br>Everything stays in one tidy thread.</p>
             </div>
         </div>
 
-        <div class="message-input-container">
-            <div class="input-actions">
-                <button class="icon-btn" title="Add media"><i class="fas fa-plus-circle"></i></button>
-                <button class="icon-btn" title="Photo"><i class="fas fa-image"></i></button>
+        <footer class="message-input-container">
+            <button class="icon-btn attach-btn" title="Add media" type="button"><i class="fas fa-plus"></i></button>
+            <div class="composer-field">
+                <button class="icon-btn ghost" title="Photo" type="button"><i class="far fa-image"></i></button>
+                <input type="text" id="messageInput" placeholder="Write a message…" autocomplete="off" disabled>
+                <button class="send-btn" onclick="sendMessage()" title="Send" type="button" id="sendBtn">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
             </div>
-            <div id="chatBox"></div>
-            <input type="text" id="messageInput" placeholder="Message…">
-            <button class="send-btn" onclick="sendMessage()" title="Send">
-                <i class="fas fa-paper-plane"></i>
-            </button>
-        </div>
-    </div>
+        </footer>
+    </main>
 </div>
 
 <!-- Call overlay -->
 <div id="callOverlay" class="call-overlay" style="display:none;">
-    <div class="call-card">
+    <div class="call-card" role="dialog" aria-modal="true">
         <video id="remoteVideo" class="remote-video" autoplay playsinline style="display:none;"></video>
         <video id="localVideo" class="local-video" autoplay playsinline muted style="display:none;"></video>
         <div class="call-avatar-wrap">
@@ -144,38 +146,75 @@
     </div>
 </div>
 
-<!-- Mobile overlay -->
-<div id="sidebarOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:999;"
+<div id="sidebarOverlay" class="sidebar-overlay" style="display:none;"
      onclick="document.getElementById('sidebar').classList.remove('active');this.style.display='none';"></div>
 
 <script>
     const CURRENT_USER_ID = {{ user.id }};
     let currentUserId = null, chatInterval = null, typingInterval = null, typingTimeout = null;
-    let messagesContainer, contactName, messageInput;
+    let messagesContainer, contactName, messageInput, sendBtn;
     let isTyping = false;
+    let activeFilter = 'all';
 
     document.addEventListener("DOMContentLoaded", () => {
         messagesContainer = document.getElementById('messagesContainer');
         contactName       = document.getElementById('contactName');
         messageInput      = document.getElementById('messageInput');
+        sendBtn           = document.getElementById('sendBtn');
 
         messageInput?.addEventListener('keypress', e => {
             if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
         });
+        messageInput?.addEventListener('input', () => {
+            handleTypingInput();
+            toggleSendState();
+        });
 
-        messageInput?.addEventListener('input', handleTypingInput);
+        document.querySelectorAll('.chat-item').forEach(el => {
+            el.addEventListener('keydown', e => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+            });
+        });
+
+        document.getElementById('searchInput')?.addEventListener('input', filterList);
+        document.querySelectorAll('.conv-tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.conv-tab').forEach(x => x.classList.remove('is-active'));
+                t.classList.add('is-active');
+                activeFilter = t.dataset.filter;
+                filterList();
+            });
+        });
 
         setupMobileUI();
         loadUnreadBadges();
         setInterval(loadUnreadBadges, 5000);
+        toggleSendState();
 
-        // Deep link from home: /chat/?open=<user_id> auto-opens that conversation
         const openId = new URLSearchParams(window.location.search).get('open');
         if (openId) {
             const item = document.getElementById(`badge-${openId}`)?.closest('.chat-item');
             if (item) item.click();
         }
     });
+
+    function toggleSendState() {
+        if (!sendBtn || !messageInput) return;
+        const hasText = (messageInput.value || '').trim().length > 0 && currentUserId;
+        sendBtn.classList.toggle('is-ready', !!hasText);
+    }
+
+    function filterList() {
+        const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+        document.querySelectorAll('.chat-item').forEach(el => {
+            const name = (el.dataset.name || el.textContent || '').toLowerCase();
+            const matchQ = !q || name.includes(q);
+            const badge = el.querySelector('.unread-badge');
+            const hasUnread = badge && badge.classList.contains('visible');
+            const matchF = activeFilter === 'all' || (activeFilter === 'unread' && hasUnread);
+            el.style.display = (matchQ && matchF) ? '' : 'none';
+        });
+    }
 
     function handleTypingInput() {
         if (!currentUserId) return;
@@ -221,20 +260,20 @@
         currentUserId = userId;
         document.getElementById('contactName').innerText = username || 'User';
         document.getElementById('contactAvatar').src = imageUrl || '';
-        document.getElementById('contactStatus').innerText = 'Active now';
-        document.getElementById('contactStatus').style.display = '';
+        const st = document.getElementById('contactStatus');
+        st.innerText = 'Active now';
+        st.style.display = '';
         document.getElementById('typingIndicator').classList.remove('visible');
-        if (messageInput) messageInput.disabled = false;
+        if (messageInput) { messageInput.disabled = false; messageInput.placeholder = `Message ${username || 'user'}…`; }
         if (messagesContainer) messagesContainer.innerHTML = '';
         lastMessageCount = 0;
+        toggleSendState();
 
         document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
-        event?.currentTarget?.classList.add('active');
+        if (window.event?.currentTarget?.classList) window.event.currentTarget.classList.add('active');
 
-        // Mark chat area as open (for mobile back btn visibility)
         document.getElementById('chatArea').classList.add('chat-open');
 
-        // Clear badge for opened chat
         const badge = document.getElementById(`badge-${userId}`);
         if (badge) { badge.textContent = ''; badge.classList.remove('visible'); }
 
@@ -245,14 +284,15 @@
         if (typingInterval) clearInterval(typingInterval);
         typingInterval = setInterval(pollTyping, 1500);
 
+        filterList();
         closeSidebarOnMobile();
+        setTimeout(() => messageInput?.focus(), 60);
     };
 
-    function sendMessage() {
+    window.sendMessage = function() {
         const message = messageInput?.value?.trim();
         if (!message || !currentUserId) return;
 
-        // Stop typing indicator immediately
         isTyping = false;
         sendTypingStatus(false);
         clearTimeout(typingTimeout);
@@ -266,11 +306,12 @@
         .then(data => {
             if (data.status === 'success') {
                 messageInput.value = '';
+                toggleSendState();
                 loadMessages(currentUserId);
             }
         })
         .catch(err => console.error('Send error:', err));
-    }
+    };
 
     let lastMessageCount = 0;
 
@@ -281,18 +322,15 @@
             if (!messagesContainer) return;
             const messages = data.messages || data;
 
-            // Only re-render if message count changed — no blink on poll
             if (messages.length === lastMessageCount) return;
 
-            const wasAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 60;
+            const wasAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 80;
 
             if (messages.length < lastMessageCount) {
-                // Full reset (e.g. switched chat)
                 messagesContainer.innerHTML = '';
                 lastMessageCount = 0;
             }
 
-            // Append only new messages
             const newMsgs = messages.slice(lastMessageCount);
             newMsgs.forEach(msg => {
                 const type = (msg.sender == CURRENT_USER_ID) ? 'sent' : 'received';
@@ -307,6 +345,7 @@
 
     function appendMessage(text, type, time, isRead) {
         if (!messagesContainer) return;
+        messagesContainer.querySelector('.no-chat-selected')?.remove();
 
         const wrap = document.createElement('div');
         wrap.className = `msg-wrap ${type}`;
@@ -345,17 +384,25 @@
         fetch('/get_users_with_unread/')
         .then(r => r.json())
         .then(data => {
+            let total = 0;
             (data.users || []).forEach(u => {
                 const badge = document.getElementById(`badge-${u.id}`);
                 if (!badge) return;
                 if (u.unread > 0 && String(u.id) !== String(currentUserId)) {
                     badge.textContent = u.unread > 99 ? '99+' : u.unread;
                     badge.classList.add('visible');
+                    total += u.unread;
                 } else {
                     badge.textContent = '';
                     badge.classList.remove('visible');
                 }
             });
+            const pill = document.getElementById('unreadTotal');
+            if (pill) {
+                if (total > 0) { pill.hidden = false; pill.textContent = total > 99 ? '99+' : total; }
+                else { pill.hidden = true; }
+            }
+            if (activeFilter === 'unread') filterList();
         }).catch(() => {});
     }
 
@@ -369,7 +416,6 @@
         const overlay = document.getElementById('sidebarOverlay');
 
         mobileBackBtn?.addEventListener('click', () => {
-            // Show sidebar (chat list) — this is the "back" action on mobile
             sidebar.classList.add('active');
             if (overlay) overlay.style.display = 'none';
             document.getElementById('chatArea').classList.remove('chat-open');
@@ -390,24 +436,18 @@
         });
     }
 
-    // Real-time maintenance check
     setInterval(() => {
         fetch('/admin-maintenance/')
             .then(r => r.json())
             .then(d => {
                 if (d.maintenance) {
                     document.body.innerHTML = `
-                    <div style="position:fixed;inset:0;background:linear-gradient(160deg,#f8fafc,#eef2ff);display:flex;align-items:center;justify-content:center;z-index:99999;font-family:Inter,sans-serif;">
-                        <div style="text-align:center;padding:40px;background:rgba(255,255,255,0.65);border:1px solid rgba(15,23,42,0.09);border-radius:26px;box-shadow:0 24px 64px rgba(15,23,42,0.12);">
-                            <div style="font-size:64px;animation:spin 3s linear infinite;display:inline-block;">⚙️</div>
-                            <h1 style="font-size:28px;font-weight:900;color:#0f172a;margin:20px 0 10px;letter-spacing:-1px;">Under Maintenance</h1>
-                            <p style="color:#64748b;font-size:14px;line-height:1.7;">We're performing scheduled maintenance.<br>We'll be back shortly!</p>
-                            <div style="margin-top:24px;display:inline-flex;align-items:center;gap:8px;padding:8px 20px;background:rgba(217,119,6,0.1);border:1px solid rgba(217,119,6,0.3);border-radius:40px;color:#b45309;font-size:12px;font-weight:700;">
-                                <span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;animation:blink 1.5s infinite;display:inline-block;"></span>
-                                Maintenance in progress
-                            </div>
+                    <div style="position:fixed;inset:0;background:#f3f4f6;display:flex;align-items:center;justify-content:center;z-index:99999;font-family:Inter,sans-serif;">
+                        <div style="text-align:center;padding:40px;background:#fff;border:1px solid #e5e7eb;border-radius:20px;box-shadow:0 12px 32px rgba(16,24,40,0.08);max-width:360px;">
+                            <div style="font-size:40px;margin-bottom:12px;">&#9881;&#65039;</div>
+                            <h1 style="font-size:20px;font-weight:800;color:#111827;margin:0 0 8px;letter-spacing:-0.3px;">Under maintenance</h1>
+                            <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:0;">We're doing scheduled work.<br>We'll be back shortly.</p>
                         </div>
-                        <style>@keyframes spin{to{transform:rotate(360deg)}}@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}</style>
                     </div>`;
                 }
             }).catch(() => {});
@@ -454,7 +494,6 @@ function newCallId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }
 
-/* --- ringtone (tiny WebAudio beep, no audio file needed) --- */
 let _ringCtx = null, _ringTimer = null;
 function startRing(incoming) {
     try {
@@ -714,7 +753,6 @@ function showCallUI(mode) {
         st.textContent = c.type === 'video' ? 'Video call' : 'Voice call';
         acc.style.display = 'none'; dec.style.display = 'none'; hang.style.display = 'flex';
         tm.style.display = 'block';
-        // ontrack can fire BEFORE 'connected' — don't hide an attached remote stream
         rv.style.display = (c.type === 'video' && rv.srcObject) ? 'block' : 'none';
     }
 }
