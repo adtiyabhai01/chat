@@ -585,6 +585,27 @@ _typing_store = {}
 
 
 @csrf_exempt
+@require_POST
+def delete_message(request):
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    try:
+        msg = Message.objects.get(id=data.get('message_id'))
+    except (Message.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({"status": "error", "message": "Message not found"}, status=404)
+    if msg.sender_id != user_id:
+        return JsonResponse({"status": "error", "message": "You can only delete your own messages"}, status=403)
+    msg.delete()
+    logger.info(f'Message {data.get("message_id")} deleted by user {user_id}')
+    return JsonResponse({"status": "ok"})
+
+
+@csrf_exempt
 def set_typing(request):
     if request.method != 'POST':
         return JsonResponse({"status": "error"})

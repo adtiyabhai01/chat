@@ -147,6 +147,14 @@
     </div>
 </div>
 
+<!-- Message action sheet (delete own message) -->
+<div id="msgSheet" class="msg-sheet" style="display:none;" onclick="if(event.target===this)closeMsgSheet()">
+    <div class="msg-sheet-card">
+        <button class="msg-sheet-del" id="msgSheetDel"><i class="fas fa-trash"></i> Delete message</button>
+        <button class="msg-sheet-cancel" onclick="closeMsgSheet()">Cancel</button>
+    </div>
+</div>
+
 <div id="sidebarOverlay" class="sidebar-overlay" style="display:none;"
      onclick="document.getElementById('sidebar').classList.remove('active');this.style.display='none';"></div>
 
@@ -190,6 +198,25 @@
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && currentUserId) loadMessages(currentUserId);
         });
+        // Long-press (mobile) / right-click (desktop) on OWN bubble -> delete sheet
+        let pressTimer = null;
+        const ownBubble = (e) => {
+            const w = e.target.closest ? e.target.closest('.msg-wrap.sent') : null;
+            if (!w || !w.dataset.mid || w.dataset.mid.startsWith('tmp-')) return null;
+            return w;
+        };
+        messagesContainer?.addEventListener('contextmenu', e => {
+            const w = ownBubble(e);
+            if (w) { e.preventDefault(); openMsgSheet(w.dataset.mid); }
+        });
+        messagesContainer?.addEventListener('touchstart', e => {
+            const w = ownBubble(e);
+            if (!w) return;
+            const mid = w.dataset.mid;
+            pressTimer = setTimeout(() => openMsgSheet(mid), 550);
+        }, { passive: true });
+        ['touchend', 'touchmove', 'touchcancel'].forEach(ev =>
+            messagesContainer?.addEventListener(ev, () => clearTimeout(pressTimer), { passive: true }));
 
         document.querySelectorAll('.chat-item').forEach(el => {
             el.addEventListener('keydown', e => {
@@ -503,6 +530,7 @@
             }
 
             if (wasAtBottom) messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            maybeShowThreadEmpty();
         })
         .catch(err => {
             if (err && err.name === 'AbortError') console.warn('Poll timeout, will retry');
@@ -626,6 +654,54 @@
     function getCookie(name) {
         return document.cookie.split('; ').find(r => r.startsWith(name + '='))?.split('=')[1];
     }
+
+    /* delete own message */
+    let sheetMid = null;
+    function openMsgSheet(mid) {
+        sheetMid = mid;
+        document.getElementById('msgSheet').style.display = 'flex';
+    }
+    function closeMsgSheet() {
+        sheetMid = null;
+        document.getElementById('msgSheet').style.display = 'none';
+    }
+    function maybeShowThreadEmpty() {
+        if (!messagesContainer) return;
+        const hasMsgs = !!messagesContainer.querySelector('.msg-wrap');
+        let emp = messagesContainer.querySelector('.thread-empty');
+        if (!hasMsgs && currentUserId && !emp) {
+            emp = document.createElement('div');
+            emp.className = 'thread-empty';
+            emp.textContent = 'No messages yet — say hello!';
+            messagesContainer.appendChild(emp);
+        } else if (hasMsgs && emp) {
+            emp.remove();
+        }
+    }
+    document.getElementById('msgSheetDel')?.addEventListener('click', () => {
+        const mid = sheetMid;
+        closeMsgSheet();
+        if (!mid) return;
+        fetch('/delete-message/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ message_id: mid })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.status === 'success') {
+                document.querySelector(`.msg-wrap[data-mid="${mid}"]`)?.remove();
+                renderedIds.delete(String(mid));
+                delete tickById[String(mid)];
+                maybeShowThreadEmpty();
+                loadMessages(currentUserId);
+                loadUnreadBadges();
+            } else if (window.callToast) {
+                callToast(d.message || 'Delete failed');
+            }
+        })
+        .catch(() => { if (window.callToast) callToast('Delete failed'); });
+    });
 
     function setupMobileUI() {
         const sidebar = document.getElementById('sidebar');
