@@ -204,27 +204,29 @@ def _track_login_session(request, user):
 @csrf_exempt
 def login(request):
     if request.method == 'POST':
-        email = request.POST.get('email')
+        identifier = (request.POST.get('identifier') or request.POST.get('email') or '').strip()
         password = request.POST.get('password')
 
-        try:
-            user = User.objects.get(email=email)
+        # One input accepts either username (name) or email
+        user = User.objects.filter(email__iexact=identifier).first()
+        if user is None:
+            user = User.objects.filter(name__iexact=identifier).order_by('id').first()
 
-            if not user.is_active:
-                logger.warning(f'Blocked login - deactivated account: {email}')
-                return render(request, 'access_denied.html', {'email': email}, status=403)
+        if user is None:
+            logger.warning(f'Failed login - account not found: {identifier}')
+            return render(request, 'login.html', {'msg': "Account doesn't exist"})
 
-            if user.password == password:
-                _track_login_session(request, user)
-                logger.info(f'User login successful: {user.name} ({email})')
-                return redirect('home')
+        if not user.is_active:
+            logger.warning(f'Blocked login - deactivated account: {user.email}')
+            return render(request, 'access_denied.html', {'email': user.email}, status=403)
 
-            logger.warning(f'Failed login - wrong password for: {email}')
-            return render(request, 'login.html', {'msg': "Password doesn't match"})
+        if user.password == password:
+            _track_login_session(request, user)
+            logger.info(f'User login successful: {user.name} ({user.email})')
+            return redirect('home')
 
-        except User.DoesNotExist:
-            logger.warning(f'Failed login - user not found: {email}')
-            return render(request, 'login.html', {'msg': "Email doesn't exist"})
+        logger.warning(f'Failed login - wrong password for: {user.email}')
+        return render(request, 'login.html', {'msg': "Password doesn't match"})
 
     return render(request, 'login.html')
 

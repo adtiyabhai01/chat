@@ -100,11 +100,17 @@
         <div class="section">
             <div class="section-header">
                 <div class="section-title"><i class="fas fa-users"></i> All Users</div>
-                <input id="userSearch" class="users-search" type="text" placeholder="Search name or email…">
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <input id="userSearch" class="users-search" type="text" placeholder="Search name or email…">
+                    <div class="colfilter-wrap">
+                        <button class="btn btn-secondary" title="Choose columns" onclick="document.getElementById('colFilterMenu').classList.toggle('show')"><i class="fas fa-filter"></i></button>
+                        <div class="colfilter-menu" id="colFilterMenu"></div>
+                    </div>
+                </div>
             </div>
             <div style="overflow-x:auto">
                 <table class="data-table" id="usersTable">
-                    <thead><tr><th>Status</th><th>User</th><th>Mobile</th><th>Messages</th><th>Last seen</th><th>Access</th><th></th></tr></thead>
+                    <thead><tr><th>Status</th><th>User</th><th>Email</th><th>Mobile</th><th>Password</th><th>Messages</th><th>Last seen</th><th>Access</th><th></th></tr></thead>
                     <tbody>
                         {% for x in users_data %}
                         <tr id="row-{{ x.id }}" class="u-row{% if not x.is_active %} row-off{% endif %}" onclick="openUserDetail({{ x.id }})">
@@ -115,10 +121,17 @@
                             <td>
                                 <div class="u-cell">
                                     <div class="u-av">{{ x.name|slice:":1" }}</div>
-                                    <div><div class="u-name">{{ x.name }} {% if x.is_online %}<span class="u-live">● online</span>{% endif %}</div><div class="u-email">{{ x.email }}</div></div>
+                                    <div class="u-name">{{ x.name }}
+                                        <button class="copy-btn" title="Copy username" onclick="event.stopPropagation();copyText('{{ x.name|escapejs }}', this)"><i class="fas fa-copy"></i></button>
+                                        {% if x.is_online %} <span class="u-live">● online</span>{% endif %}
+                                    </div>
                                 </div>
                             </td>
+                            <td class="u-email">{{ x.email }}</td>
                             <td>{{ x.mobile|default:"—" }}</td>
+                            <td style="white-space:nowrap"><span class="pw-cell">{{ x.password }}</span>
+                                <button class="copy-btn" title="Copy password" onclick="event.stopPropagation();copyText('{{ x.password|escapejs }}', this)"><i class="fas fa-copy"></i></button>
+                            </td>
                             <td>{{ x.messages }}</td>
                             <td style="color:var(--muted);font-size:11px;white-space:nowrap">{{ x.last_seen }}</td>
                             <td>
@@ -132,7 +145,7 @@
                         </td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="7" class="empty-state">No users found</td></tr>
+                        <tr><td colspan="9" class="empty-state">No users found</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -239,6 +252,63 @@ document.getElementById('userSearch').addEventListener('input', function () {
         tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
     });
 });
+
+/* one-tap copy */
+function copyText(t, btn) {
+    const done = () => {
+        if (btn) {
+            btn.classList.add('copied');
+            setTimeout(() => btn.classList.remove('copied'), 1200);
+        }
+    };
+    const fallback = () => {
+        const ta = document.createElement('textarea');
+        ta.value = t;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        ta.remove();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(done).catch(fallback);
+    } else fallback();
+}
+
+/* column visibility filter */
+const COL_LABELS = ['Status', 'User', 'Email', 'Mobile', 'Password', 'Messages', 'Last seen', 'Access', 'Delete'];
+function setCol(i, show) {
+    document.querySelectorAll('#usersTable tr').forEach(tr => {
+        const cell = tr.children[i];
+        if (cell) cell.style.display = show ? '' : 'none';
+    });
+}
+(function initColFilter() {
+    const menu = document.getElementById('colFilterMenu');
+    if (!menu) return;
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('adminCols') || '{}'); } catch (e) {}
+    COL_LABELS.forEach((label, i) => {
+        const show = saved[i] !== false;
+        const lab = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = show;
+        cb.addEventListener('change', () => {
+            setCol(i, cb.checked);
+            let s = {};
+            try { s = JSON.parse(localStorage.getItem('adminCols') || '{}'); } catch (e) {}
+            s[i] = cb.checked;
+            try { localStorage.setItem('adminCols', JSON.stringify(s)); } catch (e) {}
+        });
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(' ' + label));
+        menu.appendChild(lab);
+        if (!show) setCol(i, false);
+    });
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.colfilter-wrap')) menu.classList.remove('show');
+    });
+})();
 function postAccess(uid, toActive) {
     return fetch('/admin-users/toggle/', {
         method: 'POST',

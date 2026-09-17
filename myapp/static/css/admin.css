@@ -147,6 +147,38 @@ tr.u-row { cursor: pointer; }
 }
 .del-btn:hover { background: #dc2626; color: #fff; transform: scale(1.08); }
 
+/* copy buttons */
+.copy-btn {
+    border: none; background: transparent; cursor: pointer;
+    color: var(--faint); font-size: 11px; padding: 4px 5px; border-radius: 6px;
+    transition: color 0.2s, background 0.2s;
+}
+.copy-btn:hover { color: var(--accent-deep); background: var(--accent-soft); }
+.copy-btn.copied { color: #047857; }
+
+.pw-cell { font-family: ui-monospace, monospace; font-size: 12px; }
+
+/* column filter dropdown */
+.colfilter-wrap { position: relative; }
+.colfilter-menu {
+    display: none;
+    position: absolute; right: 0; top: calc(100% + 8px);
+    min-width: 170px; z-index: 300;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--stroke); border-radius: 14px;
+    box-shadow: var(--shadow-lg);
+    padding: 8px;
+}
+.colfilter-menu.show { display: block; }
+.colfilter-menu label {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 12px; font-weight: 600; color: var(--ink);
+    padding: 8px 10px; border-radius: 9px; cursor: pointer;
+}
+.colfilter-menu label:hover { background: var(--accent-soft); }
+.colfilter-menu input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+
 /* user detail modal */
 .umodal-overlay {
     position: fixed; inset: 0; z-index: 1000;
