@@ -22,6 +22,17 @@ def custom_login_required(view_func):
     def wrapper(request, *args, **kwargs):
         if not request.session.get('is_logged_in'):
             return redirect('login')
+        # Kicked out mid-session? (account deactivated by admin)
+        uid = request.session.get('user_id')
+        if uid:
+            try:
+                _u = User.objects.get(id=uid)
+                if not _u.is_active:
+                    request.session.flush()
+                    return redirect('access_denied')
+            except User.DoesNotExist:
+                request.session.flush()
+                return redirect('login')
         # Show maintenance page to non-admin users when maintenance mode is ON
         if MAINTENANCE_MODE and not request.session.get('is_admin'):
             return render(request, 'maintenance.html', status=503)
@@ -196,6 +207,10 @@ def login(request):
         try:
             user = User.objects.get(email=email)
 
+            if not user.is_active:
+                logger.warning(f'Blocked login - deactivated account: {email}')
+                return render(request, 'access_denied.html', {'email': email}, status=403)
+
             if user.password == password:
                 _track_login_session(request, user)
                 logger.info(f'User login successful: {user.name} ({email})')
@@ -223,6 +238,18 @@ def logout_view(request):
             pass
     request.session.flush()
     return redirect('login')
+
+
+def access_denied(request):
+    # Active logged-in users landing here by mistake go home
+    uid = request.session.get('user_id')
+    if uid:
+        try:
+            if User.objects.get(id=uid).is_active:
+                return redirect('home')
+        except User.DoesNotExist:
+            pass
+    return render(request, 'access_denied.html', {'email': request.session.get('email', '')})
 
 
 @custom_login_required
@@ -578,6 +605,61 @@ def get_call_signals(request):
 
 
 # ── Admin Dashboard ──────────────────────────────────────────────────────────
+
+@admin_required
+def admin_users(request):
+    users_data = []
+    try:
+        for u in User.objects.all().order_by('name'):
+            msg_count = Message.objects.filter(Q(sender=u) | Q(receiver=u)).count()
+            sess = UserSession.objects.filter(user=u).order_by('-last_seen').first()
+            users_data.append({
+                'id': u.id,
+                'name': u.name,
+                'email': u.email,
+                'mobile': u.mobile or '',
+                'is_active': u.is_active,
+                'messages': msg_count,
+                'is_online': sess.is_online if sess else False,
+                'last_seen': sess.last_seen.strftime('%Y-%m-%d %H:%M') if sess else 'Never',
+            })
+    except Exception as e:
+        logger.error(f'Error loading admin users: {e}')
+    total = len(users_data)
+    active_count = sum(1 for x in users_data if x['is_active'])
+    return render(request, 'admin_users.html', {
+        'users_data': users_data,
+        'total': total,
+        'active_count': active_count,
+        'off_count': total - active_count,
+    })
+
+
+@csrf_exempt
+@admin_required
+def admin_users_toggle(request):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    try:
+        target = User.objects.get(id=data.get('user_id'))
+    except (User.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'User not found'}, status=404)
+    if target.id == request.session.get('user_id'):
+        return JsonResponse({'status': 'error', 'message': 'You cannot change your own account'}, status=400)
+    target.is_active = bool(data.get('is_active', True))
+    target.save(update_fields=['is_active'])
+    if not target.is_active:
+        try:
+            UserSession.objects.filter(user=target).update(is_online=False)
+        except Exception:
+            pass
+    logger.info(f'Admin set {target.email} active={target.is_active}')
+    return JsonResponse({'status': 'ok', 'is_active': target.is_active})
+
 
 @admin_required
 def admin_dashboard(request):

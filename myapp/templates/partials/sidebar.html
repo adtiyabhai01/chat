@@ -5,6 +5,7 @@
     <a href="{% url 'chat' %}" class="rail-btn{% if active == 'chat' %} active{% endif %}"><i class="fas fa-comment-dots"></i><span class="rail-tip">Messages</span></a>
     <a href="{% url 'show_logs' %}" class="rail-btn{% if active == 'activity' %} active{% endif %}"><i class="fas fa-history"></i><span class="rail-tip">Activity</span></a>
     {% if request.session.is_admin %}
+    <a href="{% url 'admin_users' %}" class="rail-btn{% if active == 'users' %} active{% endif %}"><i class="fas fa-users"></i><span class="rail-tip">Users</span></a>
     <a href="{% url 'admin_dashboard' %}" class="rail-btn{% if active == 'admin' %} active{% endif %}"><i class="fas fa-chart-line"></i><span class="rail-tip">Admin Panel</span></a>
     {% endif %}
     <div class="rail-spacer"></div>

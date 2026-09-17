@@ -65,6 +65,16 @@ body {
 
 .ig-foot { margin-top: 14px; font-size: 11px; color: #94a3b8; text-align: center; }
 
+/* access denied */
+.denied-icon {
+    width: 72px; height: 72px; border-radius: 50%; margin: 0 auto 18px;
+    background: rgba(220, 38, 38, 0.08); color: #dc2626;
+    display: flex; align-items: center; justify-content: center; font-size: 30px;
+}
+.denied-title { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; margin-bottom: 8px; }
+.denied-text { font-size: 13px; color: #64748b; line-height: 1.7; margin-bottom: 22px; }
+.denied-email { font-weight: 700; color: #0f172a; }
+
 @media (max-width: 450px) {
     .ig-card { padding: 28px 20px; }
 }

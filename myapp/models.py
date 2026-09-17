@@ -8,6 +8,7 @@ class User(models.Model):
     mobile = models.BigIntegerField(default=0, blank=True, null=True)
     password = models.CharField(max_length=20)
     profile_image = models.ImageField(default="", upload_to="profile_img/")
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.name}"
