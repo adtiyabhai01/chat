@@ -61,7 +61,8 @@ body::after { width: 380px; height: 380px; background: rgba(56, 189, 248, 0.12);
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th { text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 800; color: var(--sub); text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid var(--stroke); white-space: nowrap; }
 .data-table td { padding: 11px 12px; border-bottom: 1px solid rgba(15, 23, 42, 0.05); font-size: 12px; color: var(--ink); }
-.data-table tbody tr:hover { background: var(--accent-soft); }
+        .data-table tbody tr:hover { background: var(--accent-soft); }
+        .data-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 48px; }
 
 .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 40px; font-size: 10px; font-weight: 800; white-space: nowrap; }
 .badge-online { background: var(--success-soft); color: #047857; }

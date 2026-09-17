@@ -243,16 +243,13 @@
         else tableBody.appendChild(newRow);
         newRow.classList.add('new-log');
         setTimeout(() => newRow.classList.remove('new-log'), 800);
-        allRows = Array.from(document.querySelectorAll('#tableBody tr'));
+        allRows.unshift(newRow);
         updateStatsAndUI();
         applyFiltersAndRender();
         eventRateCounter++;
         if (allRows.length > 750) {
-            const rowsToRemove = allRows.slice(750);
-            rowsToRemove.forEach(r => r.remove());
-            allRows = Array.from(document.querySelectorAll('#tableBody tr'));
-            updateStatsAndUI();
-            applyFiltersAndRender();
+            const dropped = allRows.pop();
+            if (dropped) dropped.remove();
         }
     }
 

@@ -119,12 +119,18 @@ input:checked + .toggle-slider:before { transform: translateX(21px); }
 }
 .action-btn:hover { background: rgba(15, 23, 42, 0.05); color: var(--ink); }
 
-.table-container { overflow-x: auto; max-height: 560px; overflow-y: auto; scroll-behavior: smooth; }
+        .table-container {
+            overflow-x: auto;
+            max-height: 560px;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+        }
 .logs-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .logs-table thead { position: sticky; top: 0; z-index: 20; background: rgba(248, 250, 252, 0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .logs-table th { padding: 0.9rem 1rem; text-align: left; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--sub); border-bottom: 1px solid var(--stroke); }
 .logs-table td { padding: 0.8rem 1rem; border-bottom: 1px solid rgba(15, 23, 42, 0.05); }
-.logs-table tbody tr { transition: background 0.15s; cursor: pointer; }
+.logs-table tbody tr { transition: background-color 0.15s; cursor: pointer; content-visibility: auto; contain-intrinsic-size: auto 48px; }
 .logs-table tbody tr:hover { background: var(--accent-soft); transform: none; }
 
 @keyframes flashNew { 0% { background: var(--warning-soft); } 100% { background: transparent; } }

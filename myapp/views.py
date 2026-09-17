@@ -526,10 +526,13 @@ def get_messages(request, user_id):
             is_read=False
         ).update(is_read=True)
 
-        messages = Message.objects.filter(
+        # Latest 300 only: keeps every poll payload + DOM small and smooth.
+        # (Older history stays in the DB.)
+        messages = list(Message.objects.filter(
             Q(sender_id=current_user_id, receiver_id=user_id) |
             Q(sender_id=user_id, receiver_id=current_user_id)
-        ).order_by('timestamp')
+        ).order_by('-timestamp')[:300])
+        messages.reverse()
 
         from django.utils import timezone
         data = [

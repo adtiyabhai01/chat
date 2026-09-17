@@ -229,6 +229,8 @@ body::before, body::after { display: none !important; content: none !important; 
 .chat-list {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -245,6 +247,8 @@ body::before, body::after { display: none !important; content: none !important; 
   border: 1px solid transparent;
   transition: background .12s;
   outline: none;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
 }
 
 .chat-item:hover { background: #f8f9fb; }

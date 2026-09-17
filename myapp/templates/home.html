@@ -43,7 +43,7 @@
                             <div class="hero-sub">{% if stats.unread %}You have {{ stats.unread }} unread message{{ stats.unread|pluralize }} — tap a chat below to catch up.{% else %}Everything's running smoothly — your messages and activity are ready.{% endif %}</div>
                         </div>
                         <div class="av-wrap">
-                            {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="Profile">{% else %}<i class="fas fa-user"></i>{% endif %}
+                            {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="Profile" loading="lazy" decoding="async">{% else %}<i class="fas fa-user"></i>{% endif %}
                             <div class="av-online"></div>
                         </div>
                     </div>
@@ -73,7 +73,7 @@
                         {% for c in recent_chats %}
                         <a href="{% url 'chat' %}?open={{ c.id }}" class="recent-item">
                             {% if c.avatar %}
-                            <img src="{{ c.avatar }}" class="recent-av" alt="{{ c.name }}">
+                            <img src="{{ c.avatar }}" class="recent-av" alt="{{ c.name }}" loading="lazy" decoding="async">
                             {% else %}
                             <div class="recent-av recent-initial">{{ c.name|slice:":1" }}</div>
                             {% endif %}

@@ -29,7 +29,7 @@
             <div class="me-row">
                 <div class="me-avatar">
                     {% if user.profile_image %}
-                        <img src="{{ user.profile_image.url }}" alt="Profile" class="avatar">
+                        <img src="{{ user.profile_image.url }}" alt="Profile" class="avatar" loading="lazy" decoding="async">
                     {% else %}
                         <div class="avatar-placeholder">{{ user.name|default:"U"|slice:":1" }}</div>
                     {% endif %}
@@ -58,9 +58,9 @@
                      onclick="openChat('{{ u.id }}', '{{ u.name|escapejs }}', '{% if u.profile_image %}{{ u.profile_image.url }}{% else %}https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}{% endif %}')">
                     <div class="chat-avatar">
                         {% if u.profile_image %}
-                            <img src="{{ u.profile_image.url }}" alt="{{ u.name }}">
+                            <img src="{{ u.profile_image.url }}" alt="{{ u.name }}" loading="lazy" decoding="async">
                         {% else %}
-                            <img src="https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}" alt="{{ u.name }}">
+                            <img src="https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}" alt="{{ u.name }}" loading="lazy" decoding="async">
                         {% endif %}
                     </div>
                     <div class="chat-info">
@@ -321,7 +321,7 @@
         // Show call buttons only once a conversation is selected
         document.getElementById('callActions').style.display = '';
         if (messagesContainer) messagesContainer.innerHTML = '';
-        renderedIds = new Set(); tickById = {}; lastMsgDate = '';
+        renderedIds = new Set(); tickById = {}; pendingTicks = new Set(); lastMsgDate = '';
         toggleSendState();
 
         document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
@@ -398,6 +398,8 @@
     // converges no matter how responses race. Read ticks update live too.
     let renderedIds = new Set();
     let tickById = {};
+    // Only THESE sent ids still need read-checks each poll (steady state ~zero work)
+    let pendingTicks = new Set();
     let pollInflight = false;
     let pollFails = 0;
 
@@ -495,13 +497,14 @@
                     if (mid && !mid.startsWith('tmp-') && !serverIds.has(mid)) {
                         w.remove();
                         renderedIds.delete(mid);
+                        pendingTicks.delete(mid);
                         delete tickById[mid];
                     }
                 });
                 // Shrunk list -> full rebuild to guarantee order
                 if (messages.length < renderedIds.size) {
                     messagesContainer.innerHTML = '';
-                    renderedIds = new Set(); tickById = {}; lastMsgDate = '';
+                    renderedIds = new Set(); tickById = {}; pendingTicks = new Set(); lastMsgDate = '';
                 }
             }
 
@@ -510,11 +513,14 @@
             messages.forEach(msg => {
                 const key = String(msg.id);
                 if (renderedIds.has(key)) {
-                    // Live-update the read tick without any refresh
-                    const tick = tickById[key];
-                    if (tick && msg.is_read && !tick.classList.contains('read')) {
-                        tick.className = 'fas fa-check-double tick read';
-                        tick.title = 'Read';
+                    // Live-update the read tick without any refresh (pending only)
+                    if (pendingTicks.has(key) && msg.is_read) {
+                        const tick = tickById[key];
+                        if (tick) {
+                            tick.className = 'fas fa-check-double tick read';
+                            tick.title = 'Read';
+                        }
+                        pendingTicks.delete(key);
                     }
                     return;
                 }
@@ -615,7 +621,12 @@
             lastMsgDate = date;
             appendDatePill(date, wrap);
         }
-        if (mid !== undefined && mid !== null) renderedIds.add(String(mid));
+        if (mid !== undefined && mid !== null) {
+            renderedIds.add(String(mid));
+            // Track only unread sent bubbles for per-poll tick checks
+            if (type === 'sent' && isRead !== true && !String(mid).startsWith('tmp-')) pendingTicks.add(String(mid));
+            else pendingTicks.delete(String(mid));
+        }
     }
 
     // Unread tab shows only when there is real unread. Otherwise it stays hidden.
@@ -702,6 +713,7 @@
             if (d.status === 'ok' || d.status === 'success') {
                 document.querySelector(`.msg-wrap[data-mid="${mid}"]`)?.remove();
                 renderedIds.delete(String(mid));
+                pendingTicks.delete(String(mid));
                 delete tickById[String(mid)];
                 maybeShowThreadEmpty();
                 loadMessages(currentUserId);
