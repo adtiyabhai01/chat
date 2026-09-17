@@ -26,6 +26,8 @@
             <div class="topbar-right">
                 <div class="chip chip-green"><div class="dot"></div>Online</div>
                 <div class="chip chip-dark"><i class="far fa-clock" style="color:var(--sub);font-size:10px"></i><span id="topClock">--:--</span></div>
+                <!-- Mobile only: rail nav is hidden on small screens, so logout lives here -->
+                <a href="{% url 'logout_view' %}" class="logout-mobile" title="Log out" aria-label="Log out"><i class="fas fa-sign-out-alt"></i></a>
             </div>
         </header>
 
@@ -135,6 +137,12 @@
         document.getElementById('sideDate').textContent = short;
     }
     tick(); setInterval(tick, 1000);
+
+    // Back button after logout must never resurrect this page from cache:
+    // force a server reload so logged-out users land on the login screen.
+    window.addEventListener('pageshow', (e) => {
+        if (e.persisted) window.location.reload();
+    });
 
     // Real-time maintenance check - no reload needed
     setInterval(() => {

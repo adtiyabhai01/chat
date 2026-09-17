@@ -63,6 +63,22 @@ html, body { height: 100%; overflow: hidden; }
 .topbar-right { display: flex; align-items: center; gap: 8px; }
 .chip-green { background: var(--success-soft); border-color: rgba(5, 150, 105, 0.25); color: #047857; }
 .chip-dark { color: var(--sub); }
+
+/* Mobile-only logout (desktop uses the side rail). Hidden by default. */
+.logout-mobile {
+  display: none;
+  width: 34px; height: 34px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--sub);
+  align-items: center; justify-content: center;
+  font-size: 14px; text-decoration: none;
+  flex-shrink: 0;
+}
+@media (max-width: 768px) {
+  .logout-mobile { display: inline-flex; }
+}
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); animation: blink 2s infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 

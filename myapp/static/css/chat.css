@@ -453,6 +453,12 @@ body::before, body::after { display: none !important; content: none !important; 
 }
 .icon-btn:hover { background: #f3f4f6; color: #111827; }
 
+/* Mobile-only logout (desktop uses the side rail). Hidden by default. */
+.logout-mobile { display: none; text-decoration: none; flex-shrink: 0; }
+@media (max-width: 768px) {
+  .logout-mobile { display: flex; }
+}
+
 /* messages */
 .messages-container {
   flex: 1;
