@@ -903,32 +903,29 @@ def get_typing(request, user_id):
 
 
 # ── Presence (online / last seen) ─────────────────────────────────────
-# The chat page pings heartbeat every ~15s; anyone seen within
-# PRESENCE_ONLINE_SECONDS counts as "Active now". Read ticks already
-# ride on Message.is_read (single grey = sent, double blue = read).
-PRESENCE_ONLINE_SECONDS = 120
+# The chat page pings heartbeat every ~10s; anyone seen within
+# PRESENCE_ONLINE_SECONDS counts as "Active now", so the green dot flips
+# within ~2s of a friend opening the app — no refresh needed anywhere.
+PRESENCE_ONLINE_SECONDS = 30
 
 
 def _presence_label(last_seen):
-    """Human label for a session timestamp ('Active now' handled by caller)."""
+    """Exact last-seen stamp in IST ('Active now' handled by caller).
+
+    Shows the real time — 'Last seen today at 11:34 PM' — instead of a
+    vague '5m ago', so it always matches the actual session record.
+    """
     try:
         from django.utils import timezone
-        now = timezone.now()
         if last_seen is None:
             return 'Last seen long ago'
-        delta = now - last_seen
-        secs = max(0, int(delta.total_seconds()))
-        if secs < 60:
-            return 'Last seen just now'
-        mins = secs // 60
-        if mins < 60:
-            return f'Last seen {mins}m ago'
-        hours = mins // 60
-        if hours < 24 and _ist_date(last_seen) == _ist_date(now):
-            return f'Last seen {hours}h ago'
+        now = timezone.now()
+        t = _t12(last_seen)
+        if _ist_date(last_seen) == _ist_date(now):
+            return f'Last seen today at {t}'
         if _ist_date(last_seen) == _ist_date(now - timedelta(days=1)):
-            return 'Last seen yesterday'
-        return 'Last seen ' + _ist(last_seen).strftime('%d %b %Y')
+            return f'Last seen yesterday at {t}'
+        return f"Last seen {_ist(last_seen).strftime('%d %b %Y')} at {t}"
     except Exception:
         return 'Last seen recently'
 

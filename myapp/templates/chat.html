@@ -282,11 +282,17 @@
         setupMobileUI();
         loadUnreadBadges();
         setInterval(loadUnreadBadges, 5000);
-        // Presence: tell the server I'm here, then keep everyone fresh
+        // Presence: tell the server I'm here, then keep everyone fresh.
+        // 2s poll = a friend's green dot flips almost instantly, no reload.
         heartbeat();
-        setInterval(heartbeat, 15000);
+        setInterval(heartbeat, 10000);
         pollPresence();
-        setInterval(pollPresence, 5000);
+        setInterval(pollPresence, 2000);
+        // Back from another tab/app: mark me online + refresh dots at once.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) { heartbeat(); pollPresence(); }
+        });
+        window.addEventListener('focus', () => { heartbeat(); pollPresence(); });
         toggleSendState();
 
         const openId = new URLSearchParams(window.location.search).get('open');
