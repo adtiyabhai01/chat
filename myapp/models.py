@@ -23,9 +23,13 @@ class Chat(models.Model):
 
 
 class Message(models.Model):
+    KIND_CHOICES = [('text', 'Text'), ('image', 'Image')]
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
     receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_messages')
-    text = models.TextField()
+    text = models.TextField(blank=True, default='')
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default='text')
+    image_url = models.URLField(max_length=500, blank=True, default='')
+    image_file_id = models.CharField(max_length=128, blank=True, default='')
     timestamp = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
 

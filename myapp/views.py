@@ -362,7 +362,10 @@ def _recent_map(user, limit=300):
             oid = m.receiver_id if m.sender_id == user.id else m.sender_id
             if oid in out:
                 continue
-            text = m.text or ''
+            if m.kind == 'image':
+                text = 'Photo' + (f" — {m.text}" if m.text else '')
+            else:
+                text = m.text or ''
             if len(text) > 42:
                 text = text[:42].rstrip() + '…'
             if m.sender_id == user.id:
@@ -587,8 +590,10 @@ def get_messages(request, user_id):
                 "id": msg.id,
                 "sender": msg.sender_id,
                 "message": msg.text,
-                "time": _t12(msg.timestamp),
-                "date": _ist_date(msg.timestamp).isoformat(),
+                "kind": msg.kind,
+                "image": msg.image_url,
+                "time": msg.timestamp.strftime("%H:%M"),
+                "date": msg.timestamp.strftime("%Y-%m-%d"),
                 "is_read": msg.is_read
             }
             for msg in messages
@@ -636,6 +641,81 @@ def get_users_with_unread(request):
 _typing_store = {}
 
 
+IMAGE_UPLOAD_TYPES = ('image/jpeg', 'image/png', 'image/webp', 'image/gif')
+
+
+def _imagekit_client():
+    try:
+        from imagekitio import ImageKit
+    except ImportError:
+        return None
+    pk = getattr(settings, 'IMAGEKIT_PRIVATE_KEY', '')
+    if not pk:
+        return None
+    return ImageKit(private_key=pk)
+
+
+@csrf_exempt
+@require_POST
+def send_image(request):
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    if _is_revoked(request):
+        return JsonResponse({"status": "error", "revoked": True, "message": "Account deactivated"}, status=401)
+    if _maintenance_on_for(request):
+        return _maintenance_block()
+    try:
+        receiver_id = int(request.POST.get('receiver_id') or 0)
+    except (ValueError, TypeError):
+        receiver_id = 0
+    caption = (request.POST.get('caption') or '').strip()[:500]
+    photo = request.FILES.get('photo')
+    if not receiver_id or photo is None:
+        return JsonResponse({"status": "error", "message": "Photo and receiver required"}, status=400)
+    if photo.content_type not in IMAGE_UPLOAD_TYPES:
+        return JsonResponse({"status": "error", "message": "Only JPG, PNG, WEBP or GIF photos"}, status=400)
+    max_bytes = getattr(settings, 'IMAGEKIT_MAX_MB', 5) * 1024 * 1024
+    if photo.size > max_bytes:
+        return JsonResponse({"status": "error", "message": "Photo too large (max 5MB)"}, status=400)
+    try:
+        sender = User.objects.get(id=user_id)
+        receiver = User.objects.get(id=receiver_id)
+    except User.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "User not found"}, status=404)
+    client = _imagekit_client()
+    if client is None:
+        return JsonResponse({"status": "error", "message": "Image storage not configured"}, status=500)
+    ext = os.path.splitext(photo.name or '')[1].lower()
+    if ext not in ('.jpg', '.jpeg', '.png', '.webp', '.gif'):
+        ext = '.jpg'
+    try:
+        photo.seek(0)
+        res = client.files.upload(
+            file=photo.read(),
+            file_name=f"chat_{user_id}_{receiver_id}_{int(time.time())}{ext}",
+            folder=getattr(settings, 'IMAGEKIT_FOLDER', '/dashsocial-chat'),
+            use_unique_file_name=True,
+        )
+        if isinstance(res, dict):
+            url = res.get('url') or ''
+            fid = res.get('fileId') or res.get('file_id') or ''
+        else:
+            url = getattr(res, 'url', '') or ''
+            fid = getattr(res, 'file_id', '') or getattr(res, 'fileId', '') or ''
+        if not url:
+            raise ValueError('upload returned no URL')
+    except Exception as e:
+        logger.error(f'ImageKit upload failed: {e}')
+        return JsonResponse({"status": "error", "message": "Upload failed, try again"}, status=500)
+    msg = Message.objects.create(
+        sender=sender, receiver=receiver, text=caption,
+        kind='image', image_url=url, image_file_id=fid or '',
+    )
+    logger.info(f'Image sent: {sender.name} -> {receiver.name}')
+    return JsonResponse({"status": "success", "id": msg.id, "url": url})
+
+
 @csrf_exempt
 @require_POST
 def delete_message(request):
@@ -657,7 +737,15 @@ def delete_message(request):
     if msg.sender_id != user_id:
         return JsonResponse({"status": "error", "message": "You can only delete your own messages"}, status=403)
     msg.delete()
+    fid = msg.image_file_id if msg.kind == 'image' else ''
     logger.info(f'Message {data.get("message_id")} deleted by user {user_id}')
+    if fid:
+        try:
+            client = _imagekit_client()
+            if client is not None:
+                client.files.delete(fid)
+        except Exception as e:
+            logger.warning(f'ImageKit delete failed for {fid}: {e}')
     return JsonResponse({"status": "ok"})
 
 

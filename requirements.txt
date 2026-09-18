@@ -6,3 +6,4 @@ python-decouple==3.8
 dj-database-url==2.2.0
 psycopg2-binary==2.9.9
 psutil==5.9.8
+imagekitio==5.10.0

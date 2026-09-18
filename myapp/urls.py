@@ -31,6 +31,7 @@ urlpatterns = [
     path('logout_view/', views.logout_view, name='logout_view'),
     path('get-messages/<int:user_id>/', views.get_messages, name='get_messages'),
     path('send-message/', views.send_message, name='send_message'),
+    path('send-image/', views.send_image, name='send_image'),
     path('delete-message/', views.delete_message, name='delete_message'),
     path('show_logs/', views.show_logs, name='show_logs'),
     path('get_users_with_unread/', views.get_users_with_unread, name='get_users_with_unread'),

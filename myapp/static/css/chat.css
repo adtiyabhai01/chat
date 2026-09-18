@@ -847,8 +847,7 @@ body::before, body::after { display: none !important; content: none !important; 
 }
 .announce-x:hover { color: #0f172a; }
 
-/* day separator pill (Today / Yesterday / date) */
-.date-pill {
+/* day separator pill (Today / Yesterday / date) */.date-pill {
   align-self: center;
   margin: 10px 0 4px;
   background: rgba(255, 255, 255, 0.85);
@@ -858,6 +857,73 @@ body::before, body::after { display: none !important; content: none !important; 
   padding: 5px 14px; border-radius: 40px;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   white-space: nowrap;
+}
+
+/* photo messages */
+.msg-img {
+  width: 100%;
+  max-width: 250px;
+  border-radius: 12px;
+  display: block;
+  cursor: zoom-in;
+  background: rgba(15, 23, 42, 0.06);
+}
+.message .msg-img + .msg-text { margin-top: 6px; display: block; }
+
+/* photo preview before send */
+.img-preview {
+  position: fixed; inset: 0; z-index: 2200;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.img-preview-card {
+  width: min(360px, 100%);
+  background: #fff; border-radius: 22px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.3);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.img-preview-card img {
+  width: 100%; max-height: 46vh; object-fit: contain;
+  border-radius: 14px; background: #f1f5f9;
+}
+.img-preview-card input {
+  border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 12px;
+  padding: 10px 14px; font-size: 14px; font-family: inherit; outline: none;
+}
+.img-preview-card input:focus { border-color: #4f46e5; }
+.img-preview-row { display: flex; gap: 10px; }
+.ip-btn {
+  flex: 1; border: none; border-radius: 12px; padding: 12px;
+  font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.ip-cancel { background: rgba(15, 23, 42, 0.06); color: #0f172a; }
+.ip-send { background: #4f46e5; color: #fff; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35); }
+.ip-send:hover { background: #4338ca; }
+
+/* fullscreen photo viewer */
+.img-viewer {
+  position: fixed; inset: 0; z-index: 2300;
+  background: rgba(2, 6, 23, 0.92);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.img-viewer img { max-width: 100%; max-height: 86vh; border-radius: 12px; object-fit: contain; }
+.viewer-x {
+  position: absolute; top: 16px; right: 16px;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12); color: #fff; border: none;
+  font-size: 16px; cursor: pointer;
+}
+.viewer-dl {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: #fff; color: #0f172a; text-decoration: none;
+  font-size: 13px; font-weight: 700;
+  padding: 10px 22px; border-radius: 40px;
+  display: flex; align-items: center; gap: 8px;
 }
 
 /* message action sheet (delete own bubble) */

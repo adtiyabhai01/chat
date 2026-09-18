@@ -121,16 +121,36 @@
         </div>
 
         <footer class="message-input-container">
-            <button class="icon-btn attach-btn" title="Add media" type="button" onmousedown="event.preventDefault()"><i class="fas fa-plus"></i></button>
+            <button class="icon-btn attach-btn" title="Add media" type="button" onmousedown="event.preventDefault()" onclick="openImagePicker()"><i class="fas fa-plus"></i></button>
             <div class="composer-field">
-                <button class="icon-btn ghost" title="Photo" type="button" onmousedown="event.preventDefault()"><i class="far fa-image"></i></button>
+                <button class="icon-btn ghost" title="Photo" type="button" onmousedown="event.preventDefault()" onclick="openImagePicker()"><i class="far fa-image"></i></button>
                 <input type="text" id="messageInput" placeholder="Write a message…" autocomplete="off" disabled>
                 <button class="send-btn" onclick="sendMessage()" onmousedown="event.preventDefault()" title="Send" type="button" id="sendBtn">
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </div>
         </footer>
+        <input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
     </main>
+</div>
+
+<!-- Photo preview before send -->
+<div id="imgPreview" class="img-preview" style="display:none;">
+    <div class="img-preview-card">
+        <img id="imgPreviewImg" src="" alt="Preview">
+        <input type="text" id="imgCaption" placeholder="Add a caption…" maxlength="500" autocomplete="off">
+        <div class="img-preview-row">
+            <button class="ip-btn ip-cancel" type="button" onclick="closeImagePreview()">Cancel</button>
+            <button class="ip-btn ip-send" type="button" onclick="sendImageMessage()"><i class="fas fa-paper-plane"></i> Send</button>
+        </div>
+    </div>
+</div>
+
+<!-- Fullscreen photo viewer -->
+<div id="imgViewer" class="img-viewer" style="display:none;" onclick="if(event.target===this)closeViewer()">
+    <button class="viewer-x" onclick="closeViewer()" title="Close"><i class="fas fa-times"></i></button>
+    <img id="imgViewerImg" src="" alt="Photo">
+    <a id="imgViewerDl" class="viewer-dl" href="" download target="_blank" rel="noopener"><i class="fas fa-download"></i> Save</a>
 </div>
 
 <!-- Call overlay -->
@@ -205,6 +225,19 @@
         // Refresh instantly when coming back to the tab/app
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && currentUserId) loadMessages(currentUserId);
+        });
+        // Photo picker validation (type + 5MB) before preview
+        document.getElementById('photoInput')?.addEventListener('change', function () {
+            const f = this.files[0];
+            const bad = (m) => { if (window.callToast) callToast(m); this.value = ''; };
+            if (!f) return;
+            if (!PHOTO_TYPES.includes(f.type)) { bad('Only JPG, PNG, WEBP or GIF photos'); return; }
+            if (f.size > PHOTO_MAX) { bad('Photo too large (max 5MB)'); return; }
+            pickedFile = f;
+            document.getElementById('imgPreviewImg').src = URL.createObjectURL(f);
+            document.getElementById('imgCaption').value = '';
+            document.getElementById('imgPreview').style.display = 'flex';
+            this.value = '';
         });
         // Long-press (mobile) / right-click (desktop) on OWN bubble -> delete sheet
         let pressTimer = null;
@@ -547,7 +580,7 @@
                     return;
                 }
                 const type = (msg.sender == CURRENT_USER_ID) ? 'sent' : 'received';
-                appendMessage(msg.message || msg.text || '', type, msg.time || '', msg.is_read, key, msg.date);
+                appendMessage(msg.message || msg.text || '', type, msg.time || '', msg.is_read, key, msg.date, msg.image || '');
             });
 
             // Sidebar preview for the open chat stays current
@@ -589,7 +622,7 @@
         return `${h}:${m[2]} ${ap}`;
     }
 
-    function appendMessage(text, type, time, isRead, mid, date) {
+    function appendMessage(text, type, time, isRead, mid, date, img) {
         if (!messagesContainer) return;
         messagesContainer.querySelector('.no-chat-selected')?.remove();
 
@@ -600,10 +633,21 @@
         const bubble = document.createElement('div');
         bubble.className = `message message-${type}`;
 
-        const txt = document.createElement('span');
-        txt.className = 'msg-text';
-        txt.innerText = text;
-        bubble.appendChild(txt);
+        if (img) {
+            const im = document.createElement('img');
+            im.className = 'msg-img';
+            im.src = img;
+            im.loading = 'lazy';
+            im.alt = 'Photo';
+            im.addEventListener('click', (ev) => { ev.stopPropagation(); openViewer(img); });
+            bubble.appendChild(im);
+        }
+        if (text) {
+            const txt = document.createElement('span');
+            txt.className = 'msg-text';
+            txt.innerText = text;
+            bubble.appendChild(txt);
+        }
 
         const side = document.createElement('span');
         side.className = 'msg-side';
@@ -695,6 +739,77 @@
 
     function getCookie(name) {
         return document.cookie.split('; ').find(r => r.startsWith(name + '='))?.split('=')[1];
+    }
+
+    /* photo messages (ImageKit storage) */
+    const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const PHOTO_MAX = 5 * 1024 * 1024;
+    let pickedFile = null;
+
+    function openImagePicker() {
+        if (!currentUserId) {
+            if (window.callToast) callToast('Open a chat first');
+            return;
+        }
+        document.getElementById('photoInput').click();
+    }
+    function closeImagePreview() {
+        pickedFile = null;
+        document.getElementById('imgPreview').style.display = 'none';
+        document.getElementById('imgPreviewImg').src = '';
+    }
+    function openViewer(url) {
+        document.getElementById('imgViewerImg').src = url;
+        document.getElementById('imgViewerDl').href = url;
+        document.getElementById('imgViewer').style.display = 'flex';
+    }
+    function closeViewer() {
+        document.getElementById('imgViewer').style.display = 'none';
+        document.getElementById('imgViewerImg').src = '';
+    }
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { closeViewer(); closeImagePreview(); closeMsgSheet(); }
+    });
+
+    async function sendImageMessage() {
+        if (!pickedFile || !currentUserId) return;
+        const caption = document.getElementById('imgCaption').value.trim().slice(0, 500);
+        const blobUrl = document.getElementById('imgPreviewImg').src;
+        const file = pickedFile;
+        closeImagePreview();
+        // Optimistic local preview
+        const nowT = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const tmpId = 'tmp-' + Date.now().toString(36) + Math.floor(Math.random() * 1e6);
+        appendMessage(caption, 'sent', nowT, false, tmpId, todayISO(), blobUrl);
+        const optimistic = messagesContainer.lastElementChild;
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        const fd = new FormData();
+        fd.append('receiver_id', currentUserId);
+        fd.append('caption', caption);
+        fd.append('photo', file, file.name);
+        pickedFile = null;
+        try {
+            const r = await fetch('/send-image/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                body: fd
+            });
+            let d = {};
+            try { d = await r.json(); } catch (e) {}
+            if (d.revoked) { window.location.href = '/access-denied/'; return; }
+            if (d.maintenance) { window.location.reload(); return; }
+            if (d.status === 'success') {
+                optimistic?.remove();
+                renderedIds.delete(tmpId);
+                loadMessages(currentUserId);
+            } else {
+                optimistic?.remove();
+                if (window.callToast) callToast(d.message || 'Photo failed to send');
+            }
+        } catch (e) {
+            optimistic?.remove();
+            if (window.callToast) callToast('Photo failed to send');
+        }
     }
 
     /* delete own message */

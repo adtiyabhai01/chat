@@ -4,6 +4,16 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load local .env for development (setdefault: never overrides real env vars,
+# so production/Vercel behaviour is unchanged).
+_env_path = BASE_DIR / '.env'
+if _env_path.exists():
+    for _line in _env_path.read_text(encoding='utf-8').splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith('#') and '=' in _line:
+            _k, _v = _line.split('=', 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
+
 # ========================
 # SECURITY
 # ========================
@@ -105,6 +115,15 @@ MEDIA_URL = '/media/'
 # Vercel (/var/task) is read-only -> set MEDIA_ROOT=/tmp in Vercel env.
 # Local default stays ./media
 MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
+
+# ========================
+# IMAGEKIT (chat photo storage)
+# ========================
+IMAGEKIT_PUBLIC_KEY = os.environ.get('IMAGEKIT_PUBLIC_KEY', '')
+IMAGEKIT_PRIVATE_KEY = os.environ.get('IMAGEKIT_PRIVATE_KEY', '')
+IMAGEKIT_URL_ENDPOINT = os.environ.get('IMAGEKIT_URL_ENDPOINT', '')
+IMAGEKIT_FOLDER = os.environ.get('IMAGEKIT_FOLDER', '/dashsocial-chat')
+IMAGEKIT_MAX_MB = int(os.environ.get('IMAGEKIT_MAX_MB', '5') or 5)
 
 # ========================
 # SECURITY (SAFE VERSION)
