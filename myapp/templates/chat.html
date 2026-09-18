@@ -106,6 +106,12 @@
             <a href="{% url 'logout_view' %}" class="icon-btn logout-mobile" title="Log out" aria-label="Log out"><i class="fas fa-sign-out-alt"></i></a>
         </header>
 
+        <div id="announceBar" class="announce-bar" style="display:none;">
+            <i class="fas fa-bullhorn"></i>
+            <span id="announceText"></span>
+            <button class="announce-x" onclick="dismissAnnounce()" title="Dismiss"><i class="fas fa-times"></i></button>
+        </div>
+
         <div class="messages-container" id="messagesContainer" role="log" aria-live="polite">
             <div class="no-chat-selected">
                 <div class="empty-art"><i class="fas fa-comments"></i></div>
@@ -959,7 +965,27 @@ async function startCall(type) {
         try {
             const d = await apiJSON('/get-call-signals/');
             for (const s of (d.signals || [])) handleSignal(s);
+            // Admin broadcast banner (dismissal remembered per browser)
+            const bar = document.getElementById('announceBar');
+            if (bar) {
+                let dismissed = '';
+                try { dismissed = localStorage.getItem('dismissedAnn') || ''; } catch (e) {}
+                const ann = d.announcement;
+                if (ann && String(ann.id) !== dismissed) {
+                    document.getElementById('announceText').textContent = ann.text;
+                    bar.dataset.aid = ann.id;
+                    bar.style.display = 'flex';
+                } else {
+                    bar.style.display = 'none';
+                }
+            }
         } catch (e) {}
+    }
+
+    function dismissAnnounce() {
+        const bar = document.getElementById('announceBar');
+        try { localStorage.setItem('dismissedAnn', (bar && bar.dataset.aid) || ''); } catch (e) {}
+        if (bar) bar.style.display = 'none';
     }
 
 async function handleSignal(s) {

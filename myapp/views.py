@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from django.views.decorators.http import require_POST
-from .models import User, Chat, Message, AppLog, UserSession, CallSignal, SiteSetting
+from .models import User, Chat, Message, AppLog, UserSession, CallSignal, SiteSetting, Announcement
 from .logging_service import get_logger
 
 logger = get_logger(__name__)
@@ -783,7 +783,11 @@ def get_call_signals(request):
             for s in qs
         ]
         CallSignal.objects.filter(id__in=[s["id"] for s in data]).update(consumed=True)
-        return JsonResponse({"signals": data})
+        ann = Announcement.objects.filter(is_active=True).order_by('-created_at').first()
+        out = {"signals": data}
+        if ann:
+            out["announcement"] = {"id": ann.id, "text": ann.text}
+        return JsonResponse(out)
     except Exception as e:
         logger.error(f'Error fetching call signals: {e}')
         return JsonResponse({"signals": [], "error": str(e)})
@@ -815,6 +819,94 @@ def admin_users_toggle(request):
             pass
     logger.info(f'Admin set {target.email} active={target.is_active}')
     return JsonResponse({'status': 'ok', 'is_active': target.is_active})
+
+
+@admin_required
+def admin_chart_data(request):
+    """14-day activity series + user split for the console charts."""
+    from django.utils import timezone
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate
+    try:
+        base = timezone.now().date()
+        days = [base - timedelta(days=i) for i in range(13, -1, -1)]
+        labels = [d.strftime('%d %b') for d in days]
+
+        def series(model, field):
+            rows = (model.objects.filter(**{f'{field}__date__gte': days[0]})
+                    .annotate(d=TruncDate(field)).values('d').annotate(c=Count('id')))
+            by_day = {r['d']: r['c'] for r in rows}
+            return [by_day.get(d, 0) for d in days]
+
+        return JsonResponse({
+            'labels': labels,
+            'messages': series(Message, 'timestamp'),
+            'logins': series(UserSession, 'login_time'),
+            'active': User.objects.filter(is_active=True).count(),
+            'off': User.objects.filter(is_active=False).count(),
+        })
+    except Exception as e:
+        logger.error(f'Chart data error: {e}')
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@admin_required
+def admin_announce_create(request):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    text = (data.get('text') or '').strip()[:500]
+    if not text:
+        return JsonResponse({'status': 'error', 'message': 'Message required'}, status=400)
+    Announcement.objects.filter(is_active=True).update(is_active=False)
+    a = Announcement.objects.create(
+        text=text, is_active=True,
+        created_by=request.session.get('admin_user', 'admin'),
+    )
+    logger.info(f'Announcement broadcast: {text[:60]}')
+    return JsonResponse({'status': 'ok', 'item': {
+        'id': a.id, 'text': a.text,
+        'time': a.created_at.strftime('%Y-%m-%d %H:%M'),
+    }})
+
+
+@csrf_exempt
+@admin_required
+def admin_announce_toggle(request):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body)
+        a = Announcement.objects.get(id=data.get('id'))
+    except (Announcement.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Not found'}, status=404)
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    on = bool(data.get('is_active', True))
+    if on:
+        Announcement.objects.filter(is_active=True).update(is_active=False)
+    a.is_active = on
+    a.save(update_fields=['is_active'])
+    return JsonResponse({'status': 'ok', 'is_active': a.is_active})
+
+
+@csrf_exempt
+@admin_required
+def admin_announce_delete(request):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body)
+        Announcement.objects.get(id=data.get('id')).delete()
+    except (Announcement.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Not found'}, status=404)
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    return JsonResponse({'status': 'ok'})
 
 
 @csrf_exempt
@@ -999,6 +1091,7 @@ def admin_console(request):
         'stats': stats,
         'users_data': users_data,
         'admin_user': request.session.get('admin_user', 'admin'),
+        'announcements': list(Announcement.objects.all()[:20]),
     })
 
 

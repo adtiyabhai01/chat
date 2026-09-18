@@ -118,3 +118,17 @@ class SiteSetting(models.Model):
 
     def __str__(self):
         return f"{self.key}={self.value}"
+
+
+class Announcement(models.Model):
+    """Admin broadcast shown as a banner on the chat page. Only one active at a time."""
+    text = models.CharField(max_length=500)
+    is_active = models.BooleanField(default=True)
+    created_by = models.CharField(max_length=100, default='admin')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{'[ON] ' if self.is_active else ''}{self.text[:60]}"

@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="{% static 'css/glass.css' %}">
     <link rel="stylesheet" href="{% static 'css/login.css' %}">
     <link rel="stylesheet" href="{% static 'css/admin.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         .login-wrap { min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 20px; position: relative; z-index: 1; }
         .login-box { width: 100%; max-width: 360px; }
@@ -67,6 +68,7 @@
     <div class="tabs">
         <button class="tab-btn active" id="tabBtn-overview" onclick="showTab('overview', this)">Overview</button>
         <button class="tab-btn" id="tabBtn-users" onclick="showTab('users', this)">Users</button>
+        <button class="tab-btn" id="tabBtn-broadcast" onclick="showTab('broadcast', this)">Broadcast</button>
         <button class="tab-btn" id="tabBtn-logs" onclick="showTab('logs', this)">Logs</button>
         <button class="tab-btn" id="tabBtn-server" onclick="showTab('server', this)">Server</button>
     </div>
@@ -80,6 +82,16 @@
             <div class="stat-card stat-online"><h3>Online Now</h3><div class="stat-value">{{ stats.online }}</div><div class="stat-sub">Active sessions</div></div>
             <div class="stat-card stat-msg"><h3>Messages</h3><div class="stat-value">{{ stats.messages }}</div><div class="stat-sub">All time</div></div>
             <div class="stat-card"><h3>Last 24h</h3><div class="stat-value">{{ stats.recent }}</div><div class="stat-sub">Recent activity</div></div>
+        </div>
+        <div class="charts-row">
+            <div class="section chart-card">
+                <div class="section-title"><i class="fas fa-chart-bar"></i> Activity — last 14 days</div>
+                <div class="chart-box"><canvas id="chartActivity"></canvas></div>
+            </div>
+            <div class="section chart-card">
+                <div class="section-title"><i class="fas fa-chart-pie"></i> Users split</div>
+                <div class="chart-box"><canvas id="chartUsers"></canvas></div>
+            </div>
         </div>
         <div class="section">
             <div class="section-header">
@@ -152,6 +164,38 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- BROADCAST -->
+    <div class="tab-pane" id="tab-broadcast">
+        <div class="section">
+            <div class="section-title"><i class="fas fa-bullhorn"></i> New announcement</div>
+            <p style="font-size:12px;color:var(--muted);margin:8px 0 12px;">Shows as a banner on top of chat for every user. Only one can be live — posting a new one replaces the current.</p>
+            <div class="compose-row">
+                <input id="annText" class="users-search" style="flex:1;min-width:180px;border-radius:12px;" maxlength="500" placeholder="Type announcement…">
+                <button class="btn btn-secondary" onclick="postAnnounce()"><i class="fas fa-paper-plane"></i> Broadcast</button>
+            </div>
+            <p id="annErr" style="min-height:16px;font-size:12px;font-weight:600;color:#dc2626;margin:6px 0 0;"></p>
+        </div>
+        <div class="section">
+            <div class="section-title"><i class="fas fa-history"></i> History</div>
+            <div id="annList" style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+                {% for a in announcements %}
+                <div class="ann-row" id="ann-{{ a.id }}">
+                    <div class="ann-main">
+                        <div class="ann-text">{{ a.text }}</div>
+                        <div class="ann-meta">{{ a.created_at|date:"Y-m-d H:i" }} · by {{ a.created_by }} · <span class="badge {% if a.is_active %}badge-online{% else %}badge-offline{% endif %}">{% if a.is_active %}Live{% else %}Off{% endif %}</span></div>
+                    </div>
+                    <div class="ann-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="toggleAnn({{ a.id }}, {% if a.is_active %}false{% else %}true{% endif %})">{% if a.is_active %}Stop{% else %}Show{% endif %}</button>
+                        <button class="del-btn" title="Delete" onclick="deleteAnn({{ a.id }})"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="empty-state">No announcements yet</div>
+                {% endfor %}
             </div>
         </div>
     </div>
@@ -262,7 +306,7 @@ function showTab(name, btn) {
     try { history.replaceState(null, '', '#' + name); } catch (e) {}
     if (name === 'logs') loadLogs('all', document.querySelector('#tab-logs .filter-btn'));
     if (name === 'server') loadHealth();
-    if (name === 'overview') loadOnline();
+    if (name === 'overview') { loadOnline(); loadCharts(); }
 }
 
 /* users */
@@ -548,6 +592,129 @@ function closeUserModal() {
     document.getElementById('userModal').style.display = 'none';
 }
 
+/* charts */
+let chActivity = null, chUsers = null;
+function loadCharts() {
+    fetch('/admin-chart-data/')
+    .then(r => r.json())
+    .then(d => {
+        if (d.error || typeof Chart === 'undefined') return;
+        if (chActivity) chActivity.destroy();
+        if (chUsers) chUsers.destroy();
+        const legend = { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } };
+        chActivity = new Chart(document.getElementById('chartActivity'), {
+            data: {
+                labels: d.labels,
+                datasets: [
+                    { type: 'bar', label: 'Messages', data: d.messages, backgroundColor: 'rgba(79,70,229,0.55)', borderRadius: 5 },
+                    { type: 'line', label: 'Logins', data: d.logins, borderColor: '#059669', backgroundColor: '#059669', tension: 0.35, pointRadius: 2 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend },
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } }
+            }
+        });
+        chUsers = new Chart(document.getElementById('chartUsers'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Active', 'Deactivated'],
+                datasets: [{ data: [d.active, d.off], backgroundColor: ['#059669', '#dc2626'], borderWidth: 2, borderColor: '#fff' }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend }, cutout: '62%' }
+        });
+    })
+    .catch(() => {});
+}
+
+/* broadcast */
+function paintAnnRow(row, live) {
+    const badge = row.querySelector('.badge');
+    if (badge) {
+        badge.textContent = live ? 'Live' : 'Off';
+        badge.className = 'badge ' + (live ? 'badge-online' : 'badge-offline');
+    }
+    const btn = row.querySelector('.ann-actions .btn');
+    if (btn) {
+        const id = +row.id.replace('ann-', '');
+        btn.textContent = live ? 'Stop' : 'Show';
+        btn.setAttribute('onclick', `toggleAnn(${id}, ${live ? 'false' : 'true'})`);
+    }
+}
+function annRowHTML(it) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML =
+        `<div class="ann-row" id="ann-${it.id}">
+            <div class="ann-main">
+                <div class="ann-text"></div>
+                <div class="ann-meta">${esc(it.time)} · <span class="badge badge-online">Live</span></div>
+            </div>
+            <div class="ann-actions">
+                <button class="btn btn-secondary btn-sm" onclick="toggleAnn(${it.id}, false)">Stop</button>
+                <button class="del-btn" title="Delete" onclick="deleteAnn(${it.id})"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>`;
+    wrap.querySelector('.ann-text').textContent = it.text;
+    return wrap.firstElementChild;
+}
+function postAnnounce() {
+    const inp = document.getElementById('annText');
+    const err = document.getElementById('annErr');
+    const text = inp.value.trim();
+    if (!text) { err.textContent = 'Type a message first.'; return; }
+    fetch('/admin-announce/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ text })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.status !== 'ok') { err.textContent = d.message || 'Failed'; return; }
+        err.textContent = '';
+        inp.value = '';
+        document.querySelectorAll('#annList .ann-row').forEach(row => paintAnnRow(row, false));
+        const list = document.getElementById('annList');
+        const empty = list.querySelector('.empty-state');
+        if (empty) empty.remove();
+        list.prepend(annRowHTML(d.item));
+    })
+    .catch(() => { err.textContent = 'Request failed'; });
+}
+function toggleAnn(id, toActive) {
+    fetch('/admin-announce/toggle/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ id, is_active: toActive })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.status !== 'ok') { alert(d.message || 'Failed'); return; }
+        if (d.is_active) {
+            document.querySelectorAll('#annList .ann-row').forEach(row => paintAnnRow(row, false));
+        }
+        const row = document.getElementById('ann-' + id);
+        if (row) paintAnnRow(row, d.is_active);
+    })
+    .catch(() => alert('Request failed'));
+}
+function deleteAnn(id) {
+    fetch('/admin-announce/delete/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ id })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.status !== 'ok') { alert(d.message || 'Failed'); return; }
+        document.getElementById('ann-' + id)?.remove();
+        if (!document.querySelector('#annList .ann-row')) {
+            document.getElementById('annList').innerHTML = '<div class="empty-state">No announcements yet</div>';
+        }
+    })
+    .catch(() => alert('Request failed'));
+}
+
 /* online sessions */
 function loadOnline() {
     fetch('/admin-online-users/')
@@ -654,11 +821,12 @@ function toggleMaintenance() {
 }
 
 loadOnline();
+loadCharts();
 loadLogs('all', null);
 // Reopen the same tab after a refresh (showTab also loads its data)
 (function restoreTab() {
     const h = (location.hash || '').replace('#', '');
-    if (['overview', 'users', 'logs', 'server'].includes(h) && h !== 'overview') {
+    if (['overview', 'users', 'broadcast', 'logs', 'server'].includes(h) && h !== 'overview') {
         const btn = document.getElementById('tabBtn-' + h);
         if (btn) showTab(h, btn);
     }
