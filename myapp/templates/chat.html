@@ -150,7 +150,7 @@
 <div id="imgViewer" class="img-viewer" style="display:none;" onclick="if(event.target===this)closeViewer()">
     <button class="viewer-x" onclick="closeViewer()" title="Close"><i class="fas fa-times"></i></button>
     <img id="imgViewerImg" src="" alt="Photo">
-    <a id="imgViewerDl" class="viewer-dl" href="" download target="_blank" rel="noopener"><i class="fas fa-download"></i> Save</a>
+    <button class="viewer-dl" onclick="downloadCurrentPhoto()"><i class="fas fa-download"></i> Save</button>
 </div>
 
 <!-- Call overlay -->
@@ -758,14 +758,38 @@
         document.getElementById('imgPreview').style.display = 'none';
         document.getElementById('imgPreviewImg').src = '';
     }
+    let viewerUrl = '';
     function openViewer(url) {
+        viewerUrl = url;
         document.getElementById('imgViewerImg').src = url;
-        document.getElementById('imgViewerDl').href = url;
         document.getElementById('imgViewer').style.display = 'flex';
     }
     function closeViewer() {
+        viewerUrl = '';
         document.getElementById('imgViewer').style.display = 'none';
         document.getElementById('imgViewerImg').src = '';
+    }
+    // Direct download (fetch->file->save). The plain `download`
+    // attribute is ignored on cross-origin URLs, which is why a new
+    // tab used to open instead.
+    async function downloadCurrentPhoto() {
+        if (!viewerUrl) return;
+        try {
+            const r = await fetch(viewerUrl, { mode: 'cors' });
+            if (!r.ok) throw new Error('http ' + r.status);
+            const b = await r.blob();
+            const o = URL.createObjectURL(b);
+            const a = document.createElement('a');
+            a.href = o;
+            a.download = 'dashsocial-photo.jpg';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(o), 5000);
+            if (window.callToast) callToast('Photo saved');
+        } catch (e) {
+            window.open(viewerUrl, '_blank', 'noopener');
+        }
     }
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') { closeViewer(); closeImagePreview(); closeMsgSheet(); }
