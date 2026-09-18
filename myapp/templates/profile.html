@@ -30,7 +30,7 @@
             {% endif %}
             <span class="pf-cam"><i class="fas fa-camera"></i></span>
         </div>
-        <p class="pf-hint">Tap the photo to change it (JPG/PNG/WEBP, max 5MB)</p>
+        <p class="pf-hint">Tap the photo to change it (JPG/PNG/WEBP)</p>
 
         <form action="{% url 'profile' %}" method="post" enctype="multipart/form-data">
             {% csrf_token %}
@@ -51,11 +51,6 @@ function previewAvatar(input) {
     if (!f) return;
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(f.type)) {
         alert('Only JPG, PNG, WEBP or GIF photos');
-        input.value = '';
-        return;
-    }
-    if (f.size > 5 * 1024 * 1024) {
-        alert('Photo too large (max 5MB)');
         input.value = '';
         return;
     }

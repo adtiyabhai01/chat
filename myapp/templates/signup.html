@@ -92,13 +92,10 @@ document.getElementById('signupForm').addEventListener('submit', function (e) {
     }
 });
 
-// Vercel rejects bodies over ~4.5MB — stop huge photos before submit
+// No size limit — any photo size allowed
 document.querySelector('input[name="profile_image"]').addEventListener('change', function () {
     const f = this.files[0];
-    if (f && f.size > 4 * 1024 * 1024) {
-        this.value = '';
-        document.getElementById('fileLabel').textContent = 'Photo too large (max 4MB) — pick a smaller one';
-    } else if (f) {
+    if (f) {
         document.getElementById('fileLabel').textContent = f.name;
     } else {
         document.getElementById('fileLabel').textContent = 'Add profile photo (optional)';

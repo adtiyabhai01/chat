@@ -123,7 +123,6 @@ IMAGEKIT_PUBLIC_KEY = os.environ.get('IMAGEKIT_PUBLIC_KEY', '')
 IMAGEKIT_PRIVATE_KEY = os.environ.get('IMAGEKIT_PRIVATE_KEY', '')
 IMAGEKIT_URL_ENDPOINT = os.environ.get('IMAGEKIT_URL_ENDPOINT', '')
 IMAGEKIT_FOLDER = os.environ.get('IMAGEKIT_FOLDER', '/dashsocial-chat')
-IMAGEKIT_MAX_MB = int(os.environ.get('IMAGEKIT_MAX_MB', '5') or 5)
 
 # ========================
 # SECURITY (SAFE VERSION)

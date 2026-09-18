@@ -230,13 +230,12 @@
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && currentUserId) loadMessages(currentUserId);
         });
-        // Photo picker validation (type + 5MB) before preview
+        // Photo picker validation (type only, no size limit) before preview
         document.getElementById('photoInput')?.addEventListener('change', function () {
             const f = this.files[0];
             const bad = (m) => { if (window.callToast) callToast(m); this.value = ''; };
             if (!f) return;
             if (!PHOTO_TYPES.includes(f.type)) { bad('Only JPG, PNG, WEBP or GIF photos'); return; }
-            if (f.size > PHOTO_MAX) { bad('Photo too large (max 5MB)'); return; }
             pickedFile = f;
             document.getElementById('imgPreviewImg').src = URL.createObjectURL(f);
             document.getElementById('imgCaption').value = '';
@@ -791,7 +790,6 @@
 
     /* photo messages (ImageKit storage) */
     const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    const PHOTO_MAX = 5 * 1024 * 1024;
     let pickedFile = null;
 
     function openImagePicker() {

@@ -207,9 +207,6 @@ def signup(request):
         except ValueError:
             return render(request, 'signup.html', {'msg': "Mobile number must be numeric"})
 
-        if profile_image and profile_image.size > 4 * 1024 * 1024:
-            return render(request, 'signup.html', {'msg': "Photo too large (max 4MB). Try a smaller one or skip it."})
-
         try:
             user = User(
                 name=name,
@@ -695,9 +692,6 @@ def _upload_avatar(photo):
     """Upload a profile photo to ImageKit. Returns (url, file_id). Raises ValueError."""
     if photo.content_type not in IMAGE_UPLOAD_TYPES:
         raise ValueError('Only JPG, PNG, WEBP or GIF photos')
-    max_bytes = getattr(settings, 'IMAGEKIT_MAX_MB', 5) * 1024 * 1024
-    if photo.size > max_bytes:
-        raise ValueError('Photo too large (max 5MB)')
     client = _imagekit_client()
     if client is None:
         raise ValueError('Image storage not configured')
@@ -764,9 +758,6 @@ def send_image(request):
         return JsonResponse({"status": "error", "message": "Photo and receiver required"}, status=400)
     if photo.content_type not in IMAGE_UPLOAD_TYPES:
         return JsonResponse({"status": "error", "message": "Only JPG, PNG, WEBP or GIF photos"}, status=400)
-    max_bytes = getattr(settings, 'IMAGEKIT_MAX_MB', 5) * 1024 * 1024
-    if photo.size > max_bytes:
-        return JsonResponse({"status": "error", "message": "Photo too large (max 5MB)"}, status=400)
     try:
         sender = User.objects.get(id=user_id)
         receiver = User.objects.get(id=receiver_id)
