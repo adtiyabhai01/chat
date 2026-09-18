@@ -976,6 +976,30 @@ body::before, body::after { display: none !important; content: none !important; 
   .msg-wrap.sent:hover .msg-menu { display: flex; }
 }
 
+/* composer + emoji picker */
+.message-input-container { position: relative; }
+.emoji-panel {
+  position: absolute; left: 12px; right: 12px; bottom: calc(100% + 8px);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18);
+  padding: 12px;
+  display: none;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 2px;
+  max-height: 220px; overflow-y: auto;
+  z-index: 600;
+}
+.emoji-btn {
+  border: none; background: transparent; cursor: pointer;
+  font-size: 22px; line-height: 1;
+  padding: 6px 2px; border-radius: 10px;
+  transition: background 0.15s, transform 0.1s;
+}
+.emoji-btn:hover { background: rgba(79, 70, 229, 0.1); transform: scale(1.15); }
+
 /* profile entry links */
 .me-link { text-decoration: none; color: inherit; display: block; border-radius: 12px; }
 .me-link:hover .me-row { background: rgba(15, 23, 42, 0.03); }

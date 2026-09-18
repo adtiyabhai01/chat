@@ -122,15 +122,17 @@
             </div>
         </div>
 
-        <footer class="message-input-container">
+        <footer class="message-input-container" id="composerBar" style="display:none;">
             <button class="icon-btn attach-btn" title="Add media" type="button" onmousedown="event.preventDefault()" onclick="openImagePicker()"><i class="fas fa-plus"></i></button>
             <div class="composer-field">
                 <button class="icon-btn ghost" title="Photo" type="button" onmousedown="event.preventDefault()" onclick="openImagePicker()"><i class="far fa-image"></i></button>
+                <button class="icon-btn ghost" title="Emoji" type="button" onmousedown="event.preventDefault()" onclick="toggleEmoji()"><i class="far fa-face-smile"></i></button>
                 <input type="text" id="messageInput" placeholder="Write a message…" autocomplete="off" disabled>
                 <button class="send-btn" onclick="sendMessage()" onmousedown="event.preventDefault()" title="Send" type="button" id="sendBtn">
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </div>
+            <div id="emojiPanel" class="emoji-panel" style="display:none;"></div>
         </footer>
         <input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
     </main>
@@ -358,8 +360,9 @@
         st.style.display = '';
         document.getElementById('typingIndicator').classList.remove('visible');
         if (messageInput) { messageInput.disabled = false; messageInput.placeholder = `Message ${username || 'user'}…`; }
-        // Show call buttons only once a conversation is selected
+        // Show call buttons + composer only once a conversation is selected
         document.getElementById('callActions').style.display = '';
+        document.getElementById('composerBar').style.display = '';
         if (messagesContainer) messagesContainer.innerHTML = '';
         renderedIds = new Set(); tickById = {}; pendingTicks = new Set(); lastMsgDate = '';
         toggleSendState();
@@ -737,6 +740,49 @@
             syncUnreadTab(total);
             if (activeFilter === 'unread') filterList();
         }).catch(() => {});
+    }
+
+    /* emoji picker (built-in, no dependency) */
+    const EMOJIS = ('😀 😁 😂 🤣 😊 😍 😘 🥰 😎 🤔 😐 🙄 😴 🤯 🥳 😷 🤒 🤕 😅 😭 😢 😤 😡 🤬 💀 👻 👽 🤖 ' +
+        '👋 🤚 ✋ ✌️ 🤞 🤟 🤙 👌 👍 👎 👊 ✊ 🤝 🙏 👏 💪 🦾 🫶 ❤️ 🧡 💛 💚 💙 💜 🖤 🤍 💔 ❣️ 💕 💖 ' +
+        '✨ 🔥 💯 🎉 🎊 🎈 🎁 🏆 🥇 ⚽ 🏏 🎮 🎲 🎯 🎸 🎧 📷 📸 💡 📚 ✏️ 📝 💰 💎 🔑 🔨 🧸 ' +
+        '🌞 🌙 ⭐ 🌈 ☁️ 🔥 🌊 🍎 🍕 🍔 🍩 🍦 ☕ 🍵 🍺 🚗 ✈️ 🚀 ⛺ 🏖️ 🐶 🐱 🐼 🦁 🐸 🐵 🙈 🙉 🙊').split(' ');
+
+    function renderEmojiPanel() {
+        const panel = document.getElementById('emojiPanel');
+        if (!panel || panel.dataset.built) return;
+        panel.dataset.built = '1';
+        EMOJIS.forEach(e => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'emoji-btn';
+            b.textContent = e;
+            b.addEventListener('mousedown', ev => ev.preventDefault());
+            b.addEventListener('click', () => insertEmoji(e));
+            panel.appendChild(b);
+        });
+        document.addEventListener('click', ev => {
+            if (panel.style.display !== 'none'
+                && !ev.target.closest('#emojiPanel')
+                && !ev.target.closest('[onclick="toggleEmoji()"]')) {
+                panel.style.display = 'none';
+            }
+        });
+    }
+    function toggleEmoji() {
+        renderEmojiPanel();
+        const panel = document.getElementById('emojiPanel');
+        panel.style.display = (panel.style.display === 'none') ? 'grid' : 'none';
+    }
+    function insertEmoji(e) {
+        const inp = document.getElementById('messageInput');
+        if (!inp) return;
+        const s = inp.selectionStart ?? inp.value.length;
+        const t = inp.selectionEnd ?? s;
+        inp.value = inp.value.slice(0, s) + e + inp.value.slice(t);
+        inp.focus({ preventScroll: true });
+        try { inp.setSelectionRange(s + e.length, s + e.length); } catch (err) {}
+        toggleSendState();
     }
 
     function getCookie(name) {
