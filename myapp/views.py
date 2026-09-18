@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from django.views.decorators.http import require_POST
-from .models import User, Chat, Message, AppLog, UserSession, CallSignal
+from .models import User, Chat, Message, AppLog, UserSession, CallSignal, SiteSetting
 from .logging_service import get_logger
 
 logger = get_logger(__name__)
@@ -62,14 +62,31 @@ def custom_login_required(view_func):
                 request.session.flush()
                 return redirect('login')
         # Show maintenance page to non-admin users when maintenance mode is ON
-        if MAINTENANCE_MODE and not request.session.get('is_admin'):
+        if is_maintenance_on() and not request.session.get('is_admin') and not request.session.get('admin_auth'):
             return render(request, 'maintenance.html', status=503)
         return view_func(request, *args, **kwargs)
     return wrapper
 
 
-# ── Maintenance Mode (in-memory flag) ──────────────────────────────────────
-MAINTENANCE_MODE = False
+# ── Maintenance Mode (DB-persisted flag — works across serverless instances) ───
+def is_maintenance_on():
+    try:
+        return SiteSetting.objects.filter(key='maintenance').values_list('value', flat=True).first() == 'on'
+    except Exception:
+        return False
+
+
+def set_maintenance_on(on):
+    SiteSetting.objects.update_or_create(key='maintenance', defaults={'value': 'on' if on else 'off'})
+
+
+def _maintenance_block():
+    """503 JSON for mutating APIs during maintenance (admins bypass)."""
+    return JsonResponse({"status": "error", "maintenance": True, "message": "Maintenance mode is on"}, status=503)
+
+
+def _maintenance_on_for(request):
+    return is_maintenance_on() and not request.session.get('is_admin') and not request.session.get('admin_auth')
 
 
 def _is_revoked(request):
@@ -127,6 +144,9 @@ def home(request):
         except User.DoesNotExist:
             request.session.flush()
             user = None
+
+    if email and _maintenance_on_for(request):
+        return render(request, 'maintenance.html', status=503)
 
     if user:
         try:
@@ -429,6 +449,8 @@ def send_message(request):
         return JsonResponse({"status": "error", "message": "Login required"})
     if _is_revoked(request):
         return JsonResponse({"status": "error", "revoked": True, "message": "Account deactivated"}, status=401)
+    if _maintenance_on_for(request):
+        return _maintenance_block()
 
     try:
         sender = User.objects.get(id=user_id)
@@ -626,6 +648,8 @@ def delete_message(request):
         return JsonResponse({"status": "error", "message": "Login required"}, status=401)
     if _is_revoked(request):
         return JsonResponse({"status": "error", "revoked": True, "message": "Account deactivated"}, status=401)
+    if _maintenance_on_for(request):
+        return _maintenance_block()
     try:
         msg = Message.objects.get(id=data.get('message_id'))
     except (Message.DoesNotExist, ValueError, TypeError):
@@ -692,6 +716,10 @@ def send_call_signal(request):
     current_user_id = request.session.get('user_id')
     if not current_user_id:
         return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    if _is_revoked(request):
+        return JsonResponse({"status": "error", "revoked": True, "message": "Account deactivated"}, status=401)
+    if _maintenance_on_for(request):
+        return _maintenance_block()
     try:
         data = json.loads(request.body)
     except Exception:
@@ -1102,13 +1130,13 @@ def save_location(request):
 @csrf_exempt
 @admin_required
 def admin_maintenance_toggle(request):
-    global MAINTENANCE_MODE
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            MAINTENANCE_MODE = bool(data.get('enabled', False))
-            logger.info(f'Maintenance mode {"ON" if MAINTENANCE_MODE else "OFF"} by admin')
-            return JsonResponse({'maintenance': MAINTENANCE_MODE})
+            on = bool(data.get('enabled', False))
+            set_maintenance_on(on)
+            logger.info(f'Maintenance mode {"ON" if on else "OFF"} by admin')
+            return JsonResponse({'maintenance': on})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
-    return JsonResponse({'maintenance': MAINTENANCE_MODE})
+    return JsonResponse({'maintenance': is_maintenance_on()})

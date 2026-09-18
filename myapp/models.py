@@ -104,3 +104,17 @@ class AppLog(models.Model):
     
     def __str__(self):
         return f"[{self.level}] {self.logger_name} - {self.message[:50]}"
+
+
+class SiteSetting(models.Model):
+    """Tiny key-value store for cross-instance flags (e.g. maintenance mode).
+
+    An in-memory global does NOT work on serverless hosts where every
+    request may hit a different process — so this lives in the DB.
+    """
+    key = models.CharField(max_length=64, unique=True)
+    value = models.CharField(max_length=255, default='')
+    updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.key}={self.value}"

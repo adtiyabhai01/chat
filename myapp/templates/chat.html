@@ -386,6 +386,7 @@
             }
         })
         .catch(err => {
+            if (err && err.data && err.data.maintenance) { window.location.reload(); return; }
             console.error('Send error:', err);
             optimistic?.remove();
             if (window.callToast) callToast('Message failed to send');
@@ -482,7 +483,11 @@
             window.location.href = '/access-denied/';
             throw new Error('revoked');
         }
-        if (!r.ok) throw new Error('http ' + r.status);
+        if (!r.ok) {
+            const err = new Error('http ' + r.status);
+            err.data = d; err.status = r.status;
+            throw err;
+        }
         return d;
     }
 
@@ -730,6 +735,8 @@
                 maybeShowThreadEmpty();
                 loadMessages(currentUserId);
                 loadUnreadBadges();
+            } else if (d.maintenance) {
+                window.location.reload();
             } else if (window.callToast) {
                 callToast(d.message || 'Delete failed');
             }
@@ -780,21 +787,30 @@
         });
     }
 
+    // Maintenance overlay that also REMOVES itself when mode turns off
+    function ensureMaintOverlay(on) {
+        let ov = document.getElementById('maintOverlay');
+        if (on && !ov) {
+            ov = document.createElement('div');
+            ov.id = 'maintOverlay';
+            ov.style.cssText = 'position:fixed;inset:0;background:#f3f4f6;display:flex;align-items:center;justify-content:center;z-index:99999;font-family:Inter,sans-serif;';
+            ov.innerHTML = `
+                    <div style="text-align:center;padding:40px;background:#fff;border:1px solid #e5e7eb;border-radius:20px;box-shadow:0 12px 32px rgba(16,24,40,0.08);max-width:360px;">
+                        <div style="font-size:40px;margin-bottom:12px;">&#9881;&#65039;</div>
+                        <h1 style="font-size:20px;font-weight:800;color:#111827;margin:0 0 8px;letter-spacing:-0.3px;">Under maintenance</h1>
+                        <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:0;">We're doing scheduled work.<br>We'll be back shortly.</p>
+                    </div>`;
+            document.body.appendChild(ov);
+        } else if (!on && ov) {
+            ov.remove();
+        }
+    }
+
     setInterval(() => {
         fetch('/admin-maintenance/')
             .then(r => r.json())
-            .then(d => {
-                if (d.maintenance) {
-                    document.body.innerHTML = `
-                    <div style="position:fixed;inset:0;background:#f3f4f6;display:flex;align-items:center;justify-content:center;z-index:99999;font-family:Inter,sans-serif;">
-                        <div style="text-align:center;padding:40px;background:#fff;border:1px solid #e5e7eb;border-radius:20px;box-shadow:0 12px 32px rgba(16,24,40,0.08);max-width:360px;">
-                            <div style="font-size:40px;margin-bottom:12px;">&#9881;&#65039;</div>
-                            <h1 style="font-size:20px;font-weight:800;color:#111827;margin:0 0 8px;letter-spacing:-0.3px;">Under maintenance</h1>
-                            <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:0;">We're doing scheduled work.<br>We'll be back shortly.</p>
-                        </div>
-                    </div>`;
-                }
-            }).catch(() => {});
+            .then(d => ensureMaintOverlay(!!(d && d.maintenance)))
+            .catch(() => {});
     }, 5000);
 </script>
 
