@@ -255,7 +255,7 @@ body::before, body::after { display: none !important; content: none !important; 
 .chat-item:focus-visible { border-color: #4f46e5; }
 .chat-item.active { background: #eef0ff; border-color: #dfe3fb; }
 
-.chat-avatar { flex-shrink: 0; }
+.chat-avatar { flex-shrink: 0; position: relative; }
 .chat-avatar img {
   width: 46px;
   height: 46px;
@@ -265,6 +265,22 @@ body::before, body::after { display: none !important; content: none !important; 
   background: #eef0ff;
   border: 1px solid #e5e7eb;
 }
+
+/* presence: green = Active now, grey = offline */
+.presence-dot-list {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #d1d5db;
+  border: 2.5px solid #fff;
+}
+.presence-dot-list.online { background: #16a34a; }
+
+.contact-status.online { color: #16a34a; font-weight: 600; }
+.contact-status.offline { color: #9ca3af; }
 
 .chat-info { flex: 1; min-width: 0; }
 

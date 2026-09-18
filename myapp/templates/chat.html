@@ -56,7 +56,7 @@
 
         <div class="chat-list" id="chatList" role="list">
             {% for u in users %}
-                <div class="chat-item" role="listitem" tabindex="0" data-name="{{ u.name|lower }}"
+                <div class="chat-item" role="listitem" tabindex="0" data-name="{{ u.name|lower }}" data-uid="{{ u.id }}"
                      onclick="openChat('{{ u.id }}', '{{ u.name|escapejs }}', '{% if u.avatar %}{{ u.avatar }}{% else %}https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}{% endif %}')">
                     <div class="chat-avatar">
                         {% if u.avatar %}
@@ -64,6 +64,7 @@
                         {% else %}
                             <img src="https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}" alt="{{ u.name }}" loading="lazy" decoding="async">
                         {% endif %}
+                        <span class="presence-dot-list" id="pres-{{ u.id }}"></span>
                     </div>
                     <div class="chat-info">
                         <div class="chat-name">
@@ -281,6 +282,11 @@
         setupMobileUI();
         loadUnreadBadges();
         setInterval(loadUnreadBadges, 5000);
+        // Presence: tell the server I'm here, then keep everyone fresh
+        heartbeat();
+        setInterval(heartbeat, 15000);
+        pollPresence();
+        setInterval(pollPresence, 5000);
         toggleSendState();
 
         const openId = new URLSearchParams(window.location.search).get('open');
@@ -350,13 +356,44 @@
         }).catch(() => {});
     }
 
+    // ── Presence (online green dot + last seen) ──
+    function heartbeat() {
+        fetch('/heartbeat/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') }
+        }).catch(() => {});
+    }
+
+    function paintPresence(map) {
+        Object.entries(map || {}).forEach(([uid, info]) => {
+            const dot = document.getElementById(`pres-${uid}`);
+            if (dot) dot.classList.toggle('online', !!info.online);
+            // Open thread header follows live state (unless typing banner owns it)
+            if (String(currentUserId) === String(uid)) {
+                const status = document.getElementById('contactStatus');
+                const typingOn = document.getElementById('typingIndicator')?.classList.contains('visible');
+                if (status && !typingOn) {
+                    status.textContent = info.label || (info.online ? 'Active now' : 'Last seen recently');
+                    status.classList.toggle('online', !!info.online);
+                    status.classList.toggle('offline', !info.online);
+                }
+            }
+        });
+    }
+
+    function pollPresence() {
+        apiJSON('/presence/').then(data => paintPresence(data.users)).catch(() => {});
+    }
+
     window.openChat = function(userId, username, imageUrl) {
         currentUserId = userId;
         document.getElementById('contactName').innerText = username || 'User';
         document.getElementById('contactAvatar').src = imageUrl || '';
         const st = document.getElementById('contactStatus');
-        st.innerText = 'Active now';
+        st.innerText = 'Connecting…';
+        st.classList.remove('online', 'offline');
         st.style.display = '';
+        pollPresence();
         document.getElementById('typingIndicator').classList.remove('visible');
         if (messageInput) { messageInput.disabled = false; messageInput.placeholder = `Message ${username || 'user'}…`; }
         // Show call buttons + composer only once a conversation is selected

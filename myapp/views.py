@@ -860,6 +860,94 @@ def get_typing(request, user_id):
     return JsonResponse({"typing": typing})
 
 
+# ── Presence (online / last seen) ─────────────────────────────────────
+# The chat page pings heartbeat every ~15s; anyone seen within
+# PRESENCE_ONLINE_SECONDS counts as "Active now". Read ticks already
+# ride on Message.is_read (single grey = sent, double blue = read).
+PRESENCE_ONLINE_SECONDS = 120
+
+
+def _presence_label(last_seen):
+    """Human label for a session timestamp ('Active now' handled by caller)."""
+    try:
+        from django.utils import timezone
+        now = timezone.now()
+        if last_seen is None:
+            return 'Last seen long ago'
+        delta = now - last_seen
+        secs = max(0, int(delta.total_seconds()))
+        if secs < 60:
+            return 'Last seen just now'
+        mins = secs // 60
+        if mins < 60:
+            return f'Last seen {mins}m ago'
+        hours = mins // 60
+        if hours < 24 and _ist_date(last_seen) == _ist_date(now):
+            return f'Last seen {hours}h ago'
+        if _ist_date(last_seen) == _ist_date(now - timedelta(days=1)):
+            return 'Last seen yesterday'
+        return 'Last seen ' + _ist(last_seen).strftime('%d %b %Y')
+    except Exception:
+        return 'Last seen recently'
+
+
+@csrf_exempt
+def heartbeat(request):
+    """Keep the current user's session fresh so others see 'Active now'."""
+    if request.method != 'POST':
+        return JsonResponse({"status": "error", "message": "POST only"}, status=405)
+    current_user_id = request.session.get('user_id')
+    if not current_user_id:
+        return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    if _is_revoked(request):
+        return JsonResponse({"revoked": True}, status=401)
+    try:
+        from django.utils import timezone
+        # auto_now only fires on save(), so stamp explicitly via update().
+        UserSession.objects.filter(
+            user_id=current_user_id, is_online=True
+        ).update(is_online=True, last_seen=timezone.now())
+        return JsonResponse({"status": "ok"})
+    except Exception as e:
+        logger.error(f'Heartbeat error: {e}')
+        return JsonResponse({"status": "error"}, status=500)
+
+
+def presence(request):
+    """Bulk online state for every conversation partner (one poll, no N+1)."""
+    current_user_id = request.session.get('user_id')
+    if not current_user_id:
+        return JsonResponse({"users": {}})
+    if _is_revoked(request):
+        return JsonResponse({"revoked": True}, status=401)
+    try:
+        from django.utils import timezone
+        now = timezone.now()
+        # Same 10-min prune the admin pages use, so counts stay consistent.
+        UserSession.objects.filter(
+            is_online=True, last_seen__lt=now - timedelta(minutes=10)
+        ).update(is_online=False)
+        cutoff = now - timedelta(seconds=PRESENCE_ONLINE_SECONDS)
+        others = list(User.objects.exclude(id=current_user_id).values_list('id', flat=True))
+        latest = {}
+        if others:
+            for s in UserSession.objects.filter(user_id__in=others).order_by('-last_seen'):
+                if s.user_id not in latest:
+                    latest[s.user_id] = s
+        out = {}
+        for uid in others:
+            s = latest.get(uid)
+            online = bool(s and s.is_online and s.last_seen and s.last_seen >= cutoff)
+            out[str(uid)] = {
+                'online': online,
+                'label': 'Active now' if online else _presence_label(s.last_seen if s else None),
+            }
+        return JsonResponse({"users": out})
+    except Exception as e:
+        logger.error(f'Presence error: {e}')
+        return JsonResponse({"users": {}})
+
+
 # ── Voice/Video Calls (WebRTC signaling over HTTP polling) ──────────────────
 # Media flows peer-to-peer via WebRTC; only tiny signaling messages go
 # through the server, so this works on hosts without WebSocket support.
