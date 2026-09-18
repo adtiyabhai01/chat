@@ -116,6 +116,7 @@ html, body { height: 100%; overflow: hidden; }
     position: relative;
 }
 .av-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.av-link { display: block; border-radius: 20px; flex-shrink: 0; }
 .av-online {
     position: absolute; bottom: -2px; right: -2px;
     width: 16px; height: 16px; background: var(--success);

@@ -27,6 +27,7 @@ urlpatterns = [
     path('login/', views.login, name='login'),
     path('signup_desh/', views.signup_desh, name='signup_desh'),
     path('home/', views.home, name='home'),
+    path('profile/', views.profile, name='profile'),
     path('chat/', views.chat, name='chat'),
     path('logout_view/', views.logout_view, name='logout_view'),
     path('get-messages/<int:user_id>/', views.get_messages, name='get_messages'),

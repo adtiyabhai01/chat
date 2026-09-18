@@ -26,10 +26,11 @@
                 </button>
             </div>
 
+            <a href="{% url 'profile' %}" class="me-link">
             <div class="me-row">
                 <div class="me-avatar">
-                    {% if user.profile_image %}
-                        <img src="{{ user.profile_image.url }}" alt="Profile" class="avatar" loading="lazy" decoding="async">
+                    {% if user.avatar %}
+                        <img src="{{ user.avatar }}" alt="Profile" class="avatar" loading="lazy" decoding="async">
                     {% else %}
                         <div class="avatar-placeholder">{{ user.name|default:"U"|slice:":1" }}</div>
                     {% endif %}
@@ -40,6 +41,7 @@
                     <div class="me-status">Active now</div>
                 </div>
             </div>
+            </a>
 
             <div class="search-wrap">
                 <i class="fas fa-search"></i>
@@ -55,10 +57,10 @@
         <div class="chat-list" id="chatList" role="list">
             {% for u in users %}
                 <div class="chat-item" role="listitem" tabindex="0" data-name="{{ u.name|lower }}"
-                     onclick="openChat('{{ u.id }}', '{{ u.name|escapejs }}', '{% if u.profile_image %}{{ u.profile_image.url }}{% else %}https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}{% endif %}')">
+                     onclick="openChat('{{ u.id }}', '{{ u.name|escapejs }}', '{% if u.avatar %}{{ u.avatar }}{% else %}https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}{% endif %}')">
                     <div class="chat-avatar">
-                        {% if u.profile_image %}
-                            <img src="{{ u.profile_image.url }}" alt="{{ u.name }}" loading="lazy" decoding="async">
+                        {% if u.avatar %}
+                            <img src="{{ u.avatar }}" alt="{{ u.name }}" loading="lazy" decoding="async">
                         {% else %}
                             <img src="https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=96&name={{ u.name|urlencode }}" alt="{{ u.name }}" loading="lazy" decoding="async">
                         {% endif %}

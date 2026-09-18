@@ -1,0 +1,67 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit profile — DashSocial</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%234f46e5'/><text x='50' y='70' font-size='60' font-family='Arial,sans-serif' font-weight='bold' text-anchor='middle' fill='white'>D</text></svg>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/glass.css' %}">
+    <link rel="stylesheet" href="{% static 'css/profile.css' %}">
+</head>
+<body>
+<main class="pf-wrap">
+    <a href="{% url 'home' %}" class="pf-back"><i class="fas fa-arrow-left"></i> Back</a>
+
+    <div class="pf-card">
+        <h1 class="pf-title">Edit profile</h1>
+
+        {% if msg %}
+        <div class="pf-msg">{{ msg }}</div>
+        {% endif %}
+
+        <div class="pf-avatar-wrap" onclick="document.getElementById('avatarInput').click()" title="Change photo">
+            {% if user.avatar %}
+            <img id="avatarPreview" src="{{ user.avatar }}" class="pf-avatar" alt="Profile photo">
+            {% else %}
+            <img id="avatarPreview" src="https://ui-avatars.com/api/?background=EEF0FF&color=4338ca&bold=true&size=256&name={{ user.name|urlencode }}" class="pf-avatar" alt="Profile photo">
+            {% endif %}
+            <span class="pf-cam"><i class="fas fa-camera"></i></span>
+        </div>
+        <p class="pf-hint">Tap the photo to change it (JPG/PNG/WEBP, max 5MB)</p>
+
+        <form action="{% url 'profile' %}" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="file" id="avatarInput" name="avatar" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+            <label class="pf-label" for="pfName">Name</label>
+            <input class="pf-input" id="pfName" type="text" name="name" value="{{ user.name }}" required autocomplete="name">
+            <label class="pf-label">Email (can't be changed)</label>
+            <input class="pf-input" type="email" value="{{ user.email }}" disabled>
+            <label class="pf-label" for="pfMobile">Mobile</label>
+            <input class="pf-input" id="pfMobile" type="tel" name="mobile" value="{% if user.mobile %}{{ user.mobile }}{% endif %}" maxlength="15" inputmode="numeric">
+            <button class="pf-btn" type="submit">Save changes</button>
+        </form>
+    </div>
+</main>
+<script>
+function previewAvatar(input) {
+    const f = input.files[0];
+    if (!f) return;
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(f.type)) {
+        alert('Only JPG, PNG, WEBP or GIF photos');
+        input.value = '';
+        return;
+    }
+    if (f.size > 5 * 1024 * 1024) {
+        alert('Photo too large (max 5MB)');
+        input.value = '';
+        return;
+    }
+    document.getElementById('avatarPreview').src = URL.createObjectURL(f);
+}
+document.getElementById('avatarInput').addEventListener('change', function () { previewAvatar(this); });
+</script>
+</body>
+</html>

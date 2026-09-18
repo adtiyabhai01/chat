@@ -163,7 +163,7 @@ def home(request):
                     seen[other.id] = {
                         'id': other.id,
                         'name': other.name,
-                        'avatar': other.profile_image.url if other.profile_image else '',
+                        'avatar': other.avatar,
                         'last_text': m.text,
                         'time': _t12(m.timestamp),
                         'unread': mine.filter(sender=other, receiver=user, is_read=False).count(),
@@ -219,13 +219,15 @@ def signup(request):
             )
             user.save()
             if profile_image:
-                # File storage may be read-only in production (e.g. Vercel).
+                # Profile photos go to ImageKit (local disk is ephemeral on Vercel).
                 # Never let a failed upload block account creation.
                 try:
-                    user.profile_image = profile_image
-                    user.save(update_fields=['profile_image'])
-                except OSError as e:
-                    logger.warning(f'Profile image not saved for {email}: {str(e)}')
+                    url, fid = _upload_avatar(profile_image)
+                    user.avatar_url = url
+                    user.avatar_file_id = fid
+                    user.save(update_fields=['avatar_url', 'avatar_file_id'])
+                except Exception as e:
+                    logger.warning(f'Signup avatar skipped for {email}: {str(e)}')
             logger.info(f'New user registered: {name} ({email})')
         except Exception as e:
             logger.error(f'Signup failed for {email}: {str(e)}')
@@ -248,7 +250,7 @@ def _track_login_session(request, user):
     request.session.pop('admin_auth', None)
     request.session.pop('admin_user', None)
     request.session['email'] = user.email
-    request.session['profile'] = user.profile_image.url if user.profile_image else ''
+    request.session['profile'] = user.avatar
     request.session['is_logged_in'] = True
     request.session['user_id'] = user.id
     request.session['is_admin'] = (user.email.strip().lower() == getattr(settings, 'ADMIN_EMAIL', ''))
@@ -403,6 +405,51 @@ def chat(request):
         'user': user,
         'users': users
     })
+
+
+@custom_login_required
+def profile(request):
+    try:
+        user = User.objects.get(id=request.session.get('user_id'))
+    except (User.DoesNotExist, ValueError, TypeError):
+        request.session.flush()
+        return redirect('login')
+
+    msg = ''
+    if request.method == 'POST':
+        name = (request.POST.get('name') or '').strip()
+        mobile = (request.POST.get('mobile') or '').strip()
+        photo = request.FILES.get('avatar')
+        if not name:
+            msg = 'Name cannot be empty.'
+        elif name.lower() != user.name.lower() and name.lower() in RESERVED_USERNAMES:
+            msg = 'This username is reserved. Please choose another.'
+        else:
+            try:
+                mobile_int = int(mobile) if mobile else 0
+            except ValueError:
+                mobile_int = None
+            if mobile_int is None:
+                msg = 'Mobile number must be numeric.'
+            else:
+                if photo:
+                    try:
+                        url, fid = _upload_avatar(photo)
+                        _delete_avatar_file(user.avatar_file_id)
+                        user.avatar_url = url
+                        user.avatar_file_id = fid
+                    except ValueError as e:
+                        msg = str(e)
+                    except Exception as e:
+                        logger.error(f'Avatar upload failed for {user.email}: {e}')
+                        msg = 'Photo upload failed, try again.'
+                if not msg:
+                    user.name = name
+                    user.mobile = mobile_int
+                    user.save(update_fields=['name', 'mobile', 'avatar_url', 'avatar_file_id'])
+                    request.session['profile'] = user.avatar
+                    msg = 'Profile updated.'
+    return render(request, 'profile.html', {'user': user, 'msg': msg})
 
 
 @custom_login_required
@@ -642,6 +689,48 @@ _typing_store = {}
 
 
 IMAGE_UPLOAD_TYPES = ('image/jpeg', 'image/png', 'image/webp', 'image/gif')
+
+
+def _upload_avatar(photo):
+    """Upload a profile photo to ImageKit. Returns (url, file_id). Raises ValueError."""
+    if photo.content_type not in IMAGE_UPLOAD_TYPES:
+        raise ValueError('Only JPG, PNG, WEBP or GIF photos')
+    max_bytes = getattr(settings, 'IMAGEKIT_MAX_MB', 5) * 1024 * 1024
+    if photo.size > max_bytes:
+        raise ValueError('Photo too large (max 5MB)')
+    client = _imagekit_client()
+    if client is None:
+        raise ValueError('Image storage not configured')
+    ext = os.path.splitext(photo.name or '')[1].lower()
+    if ext not in ('.jpg', '.jpeg', '.png', '.webp', '.gif'):
+        ext = '.jpg'
+    photo.seek(0)
+    res = client.files.upload(
+        file=photo.read(),
+        file_name=f"avatar_{int(time.time())}{ext}",
+        folder=getattr(settings, 'IMAGEKIT_FOLDER', '/dashsocial-chat') + '/profiles',
+        use_unique_file_name=True,
+    )
+    if isinstance(res, dict):
+        url = res.get('url') or ''
+        fid = res.get('fileId') or res.get('file_id') or ''
+    else:
+        url = getattr(res, 'url', '') or ''
+        fid = getattr(res, 'file_id', '') or getattr(res, 'fileId', '') or ''
+    if not url:
+        raise ValueError('Upload failed, try again')
+    return url, fid
+
+
+def _delete_avatar_file(fid):
+    if not fid:
+        return
+    try:
+        client = _imagekit_client()
+        if client is not None:
+            client.files.delete(fid)
+    except Exception as e:
+        logger.warning(f'Avatar delete failed for {fid}: {e}')
 
 
 def _imagekit_client():

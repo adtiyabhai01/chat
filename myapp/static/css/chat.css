@@ -975,3 +975,7 @@ body::before, body::after { display: none !important; content: none !important; 
 @media (hover: hover) {
   .msg-wrap.sent:hover .msg-menu { display: flex; }
 }
+
+/* profile entry links */
+.me-link { text-decoration: none; color: inherit; display: block; border-radius: 12px; }
+.me-link:hover .me-row { background: rgba(15, 23, 42, 0.03); }

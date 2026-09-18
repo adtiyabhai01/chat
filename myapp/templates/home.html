@@ -42,10 +42,12 @@
                             <div class="hero-name">{{ user.name }}</div>
                             <div class="hero-sub">{% if stats.unread %}You have {{ stats.unread }} unread message{{ stats.unread|pluralize }} — tap a chat below to catch up.{% else %}Everything's running smoothly — your messages and activity are ready.{% endif %}</div>
                         </div>
+                        <a href="{% url 'profile' %}" class="av-link" title="Edit profile">
                         <div class="av-wrap">
-                            {% if user.profile_image %}<img src="{{ user.profile_image.url }}" alt="Profile" loading="lazy" decoding="async">{% else %}<i class="fas fa-user"></i>{% endif %}
+                            {% if user.avatar %}<img src="{{ user.avatar }}" alt="Profile" loading="lazy" decoding="async">{% else %}<i class="fas fa-user"></i>{% endif %}
                             <div class="av-online"></div>
                         </div>
+                        </a>
                     </div>
                 </div>
 
