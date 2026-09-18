@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone as _tz
 
 
 class DatabaseLogHandler(logging.Handler):
@@ -15,7 +15,9 @@ class DatabaseLogHandler(logging.Handler):
                 module=record.module,
                 function=record.funcName,
                 line_number=record.lineno,
-                timestamp=datetime.fromtimestamp(record.created)
+                # Aware UTC instant: correct no matter the server's own timezone.
+                # Display is converted to IST by _ist_full() in the views.
+                timestamp=datetime.fromtimestamp(record.created, tz=_tz.utc)
             )
             log_entry.save()
         except Exception:

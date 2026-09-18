@@ -9,7 +9,7 @@ import re
 import time
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.views.decorators.http import require_POST
 from .models import User, Chat, Message, AppLog, UserSession, CallSignal, SiteSetting, Announcement
 from .logging_service import get_logger
@@ -43,6 +43,45 @@ def _ist_date(ts):
         return _ist(ts).date()
     except Exception:
         return ts.date()
+
+
+def _ist_str(ts, fmt):
+    """Format any timestamp in IST. Never raises — returns '' on bad input."""
+    try:
+        return _ist(ts).strftime(fmt)
+    except Exception:
+        return ''
+
+
+def _ist_ymd(ts):
+    """IST calendar day: '2026-09-18' (chat day pills, date grouping)."""
+    return _ist_str(ts, '%Y-%m-%d')
+
+
+def _ist_hms(ts):
+    """IST clock with seconds: '14:30:05'."""
+    return _ist_str(ts, '%H:%M:%S')
+
+
+def _ist_full(ts):
+    """IST full stamp for logs/admin: '2026-09-18 14:30:05'."""
+    return _ist_str(ts, '%Y-%m-%d %H:%M:%S')
+
+
+def _ist_min(ts):
+    """IST stamp without seconds for admin tables: '2026-09-18 14:30'."""
+    return _ist_str(ts, '%Y-%m-%d %H:%M')
+
+
+def _ist_day_start_utc():
+    """IST midnight (start of 'today' in India) as a UTC-aware datetime.
+
+    Use with timestamp__gte filters — the naive __date lookup runs in UTC
+    and miscounts near midnight IST.
+    """
+    from django.utils import timezone
+    now_ist = _ist(timezone.now())
+    return now_ist.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
 
 
 def custom_login_required(view_func):
@@ -153,7 +192,7 @@ def home(request):
             from django.utils import timezone
             mine = Message.objects.filter(Q(sender=user) | Q(receiver=user))
             stats['unread'] = mine.filter(receiver=user, is_read=False).count()
-            stats['today'] = mine.filter(timestamp__date=timezone.now().date()).count()
+            stats['today'] = mine.filter(timestamp__gte=_ist_day_start_utc()).count()
             stats['total'] = mine.count()
             latest = mine.select_related('sender', 'receiver').order_by('-timestamp')[:60]
             seen = {}
@@ -351,7 +390,7 @@ def _recent_map(user, limit=300):
     12-hour IST for today, 'Yesterday', or 'dd Mon' for older.
     """
     from django.utils import timezone
-    today = timezone.now().date()
+    today = _ist_date(timezone.now())
     out = {}
     try:
         recent = Message.objects.filter(
@@ -375,7 +414,7 @@ def _recent_map(user, limit=300):
             elif _ist_date(ts) == today - timedelta(days=1):
                 when = 'Yesterday'
             else:
-                when = ts.strftime('%d %b')
+                when = _ist_str(ts, '%d %b')
             out[oid] = {'text': text, 'time': when}
     except Exception as e:
         logger.error(f'Recent map error: {e}')
@@ -538,13 +577,14 @@ def show_logs(request):
     except FileNotFoundError:
         lines = []
 
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    from django.utils import timezone
+    now = _ist_full(timezone.now())
 
     try:
         recent_messages = Message.objects.select_related('sender', 'receiver').order_by('-timestamp')[:30]
         for msg in recent_messages:
             logs_data.append({
-                'time': msg.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'time': _ist_full(msg.timestamp),
                 'level': 'INFO',
                 'message': f'Message from {msg.sender.name} to {msg.receiver.name}: "{msg.text[:60]}"',
                 'source': 'chat',
@@ -636,8 +676,10 @@ def get_messages(request, user_id):
                 "message": msg.text,
                 "kind": msg.kind,
                 "image": msg.image_url,
-                "time": msg.timestamp.strftime("%H:%M"),
-                "date": msg.timestamp.strftime("%Y-%m-%d"),
+                # IST: the bubble must show the real Indian send time,
+                # not the raw UTC value stored in the DB.
+                "time": _t12(msg.timestamp),
+                "date": _ist_ymd(msg.timestamp),
                 "is_read": msg.is_read
             }
             for msg in messages
@@ -1034,7 +1076,7 @@ def get_call_signals(request):
                 "sender_id": s.sender_id,
                 "sender_name": s.sender.name,
                 "payload": json.loads(s.payload or '{}'),
-                "time": s.timestamp.strftime("%H:%M:%S"),
+                "time": _ist_hms(s.timestamp),
             }
             for s in qs
         ]
@@ -1084,7 +1126,7 @@ def admin_chart_data(request):
     from django.db.models import Count
     from django.db.models.functions import TruncDate
     try:
-        base = timezone.now().date()
+        base = _ist_date(timezone.now())
         days = [base - timedelta(days=i) for i in range(13, -1, -1)]
         labels = [d.strftime('%d %b') for d in days]
 
@@ -1126,7 +1168,7 @@ def admin_announce_create(request):
     logger.info(f'Announcement broadcast: {text[:60]}')
     return JsonResponse({'status': 'ok', 'item': {
         'id': a.id, 'text': a.text,
-        'time': a.created_at.strftime('%Y-%m-%d %H:%M'),
+        'time': _ist_min(a.created_at),
     }})
 
 
@@ -1240,8 +1282,8 @@ def admin_user_detail(request, user_id):
                 'os': s.os or '—',
                 'ip': s.ip_address or 'N/A',
                 'online': s.is_online,
-                'login': s.login_time.strftime('%Y-%m-%d %H:%M'),
-                'seen': s.last_seen.strftime('%Y-%m-%d %H:%M'),
+                'login': _ist_min(s.login_time),
+                'seen': _ist_min(s.last_seen),
             }
             for s in sessions
         ]
@@ -1253,7 +1295,7 @@ def admin_user_detail(request, user_id):
                 'direction': 'sent' if m.sender_id == u.id else 'received',
                 'other': m.receiver.name if m.sender_id == u.id else m.sender.name,
                 'text': m.text[:80],
-                'time': m.timestamp.strftime('%Y-%m-%d %H:%M'),
+                'time': _ist_min(m.timestamp),
             }
             for m in recent
         ]
@@ -1339,7 +1381,7 @@ def admin_console(request):
                 'is_active': u.is_active,
                 'messages': Message.objects.filter(Q(sender=u) | Q(receiver=u)).count(),
                 'is_online': sess.is_online if sess else False,
-                'last_seen': sess.last_seen.strftime('%Y-%m-%d %H:%M') if sess else 'Never',
+                'last_seen': _ist_min(sess.last_seen) if sess else 'Never',
             })
     except Exception as e:
         logger.error(f'Admin console data error: {e}')
@@ -1384,7 +1426,7 @@ def admin_logs(request):
         logs = qs[:100]
         logs_data = [
             {
-                'time': log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'time': _ist_full(log.timestamp),
                 'level': log.level,
                 'message': log.message,
                 'source': log.logger_name,
@@ -1416,8 +1458,8 @@ def admin_online_users(request):
                 'browser': s.browser,
                 'os': s.os,
                 'ip': s.ip_address or 'N/A',
-                'last_seen': s.last_seen.strftime('%Y-%m-%d %H:%M:%S'),
-                'login_time': s.login_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'last_seen': _ist_full(s.last_seen),
+                'login_time': _ist_full(s.login_time),
                 'latitude': s.latitude,
                 'longitude': s.longitude,
             }
