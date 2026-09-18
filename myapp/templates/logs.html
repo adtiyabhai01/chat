@@ -349,6 +349,21 @@
         applyFiltersAndRender();
         startAutoRefresh();
         for(let i=0;i<5;i++) setTimeout(()=>refreshLogs(), i*200);
+        // Maintenance + deactivation enforcement without refresh:
+        // maintenance -> reload (server then renders the maintenance page),
+        // revoked account -> straight to Access Denied.
+        setInterval(() => {
+            fetch('/get_users_with_unread/')
+                .then(r => r.json())
+                .then(d => {
+                    if (d && d.revoked) { window.location.href = '/access-denied/'; return; }
+                    fetch('/admin-maintenance/')
+                        .then(r => r.json())
+                        .then(m => { if (m.maintenance) location.reload(); })
+                        .catch(() => {});
+                })
+                .catch(() => {});
+        }, 5000);
     }
     init();
 </script>

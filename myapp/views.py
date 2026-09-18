@@ -72,6 +72,21 @@ def custom_login_required(view_func):
 MAINTENANCE_MODE = False
 
 
+def _is_revoked(request):
+    """True when the session's user was deactivated (or vanished). Flushes the session."""
+    uid = request.session.get('user_id')
+    if not uid:
+        return False
+    try:
+        active = User.objects.get(id=uid).is_active
+    except User.DoesNotExist:
+        active = False
+    if not active:
+        request.session.flush()
+        return True
+    return False
+
+
 def admin_required(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -80,6 +95,10 @@ def admin_required(view_func):
             return view_func(request, *args, **kwargs)
         if not request.session.get('is_logged_in'):
             return redirect('login')
+        # Every logged-in user may READ the maintenance flag (their pages poll it).
+        # Toggling (POST) stays admin-only.
+        if request.method == 'GET' and request.path.rstrip('/') == '/admin-maintenance':
+            return view_func(request, *args, **kwargs)
         if not request.session.get('is_admin'):
             is_api = request.path.startswith('/admin-stats') or \
                      request.path.startswith('/admin-logs') or \
@@ -408,6 +427,8 @@ def send_message(request):
     if not user_id:
         logger.warning('send_message called without user_id')
         return JsonResponse({"status": "error", "message": "Login required"})
+    if _is_revoked(request):
+        return JsonResponse({"status": "error", "revoked": True, "message": "Account deactivated"}, status=401)
 
     try:
         sender = User.objects.get(id=user_id)
@@ -437,6 +458,7 @@ def send_message(request):
     return JsonResponse({"status": "success"})
 
 
+@custom_login_required
 def show_logs(request):
     logs_data = []
     log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs.txt')
@@ -512,12 +534,15 @@ def show_logs(request):
     return render(request, 'logs.html', {'logs': unique_logs})
 
 
-@custom_login_required
 def get_messages(request, user_id):
+    # NOTE: no page-redirect decorator here on purpose — kicked users must get
+    # JSON {"revoked": true} (a redirect's HTML would just break polling).
     current_user_id = request.session.get('user_id')
 
     if not current_user_id:
         return JsonResponse({"messages": []})
+    if _is_revoked(request):
+        return JsonResponse({"revoked": True}, status=401)
 
     try:
         Message.objects.filter(
@@ -557,6 +582,8 @@ def get_users_with_unread(request):
     current_user_id = request.session.get('user_id')
     if not current_user_id:
         return JsonResponse({"users": []})
+    if _is_revoked(request):
+        return JsonResponse({"revoked": True}, status=401)
 
     try:
         me = User.objects.get(id=current_user_id)
@@ -597,6 +624,8 @@ def delete_message(request):
     user_id = request.session.get('user_id')
     if not user_id:
         return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    if _is_revoked(request):
+        return JsonResponse({"status": "error", "revoked": True, "message": "Account deactivated"}, status=401)
     try:
         msg = Message.objects.get(id=data.get('message_id'))
     except (Message.DoesNotExist, ValueError, TypeError):
@@ -631,6 +660,8 @@ def get_typing(request, user_id):
     current_user_id = request.session.get('user_id')
     if not current_user_id:
         return JsonResponse({"typing": False})
+    if _is_revoked(request):
+        return JsonResponse({"revoked": True}, status=401)
     key = f"{user_id}_{current_user_id}"
     last = _typing_store.get(key, 0)
     typing = (time.time() - last) < 3
@@ -704,6 +735,8 @@ def get_call_signals(request):
     current_user_id = request.session.get('user_id')
     if not current_user_id:
         return JsonResponse({"signals": []})
+    if _is_revoked(request):
+        return JsonResponse({"revoked": True}, status=401)
     _prune_call_signals()
     try:
         qs = CallSignal.objects.filter(

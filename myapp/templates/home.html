@@ -144,8 +144,13 @@
         if (e.persisted) window.location.reload();
     });
 
-    // Real-time maintenance check - no reload needed
+    // Real-time maintenance + deactivation checks - no reload needed
     setInterval(() => {
+        // Kicked (deactivated)? Bounce straight to Access Denied.
+        fetch('/get_users_with_unread/')
+            .then(r => r.json())
+            .then(d => { if (d && d.revoked) window.location.href = '/access-denied/'; })
+            .catch(() => {});
         fetch('/admin-maintenance/')
             .then(r => r.json())
             .then(d => {
