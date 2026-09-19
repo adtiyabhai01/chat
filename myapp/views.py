@@ -1,5 +1,4 @@
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Q
 from django.conf import settings
@@ -397,7 +396,6 @@ def _track_login_session(request, user):
 RESERVED_USERNAMES = {'admin', 'administrator', 'root', 'system', 'support', 'moderator', 'mod', 'help', 'dashsocial', 'official', 'service'}
 
 
-@csrf_exempt
 def login(request):
     if request.method == 'POST':
         identifier = (request.POST.get('identifier') or request.POST.get('email') or '').strip()
@@ -640,7 +638,6 @@ def start_chat(request, user_id):
 
 
 @require_POST
-@csrf_exempt
 def send_message(request):
     try:
         data = json.loads(request.body)
@@ -932,7 +929,6 @@ def _imagekit_client():
     return ImageKit(private_key=pk)
 
 
-@csrf_exempt
 @require_POST
 def send_image(request):
     user_id = request.session.get('user_id')
@@ -1112,7 +1108,6 @@ def _delete_image_file_if_orphan(fid):
         logger.warning(f'ImageKit delete failed for {fid}: {e}')
 
 
-@csrf_exempt
 @require_POST
 def delete_message(request):
     """Delete for everyone: both sides see 'This message was deleted'."""
@@ -1159,7 +1154,6 @@ def delete_message(request):
     return JsonResponse({"status": "ok"})
 
 
-@csrf_exempt
 @require_POST
 def edit_message(request):
     """Edit own text message. Receivers see the new text + an 'edited' tag."""
@@ -1204,7 +1198,6 @@ def edit_message(request):
 REACT_EMOJIS = ('❤️', '😂', '😮', '😢', '🙏', '👍', '🔥')
 
 
-@csrf_exempt
 @require_POST
 def react_message(request):
     """Toggle one emoji reaction per user (tap same emoji = remove)."""
@@ -1256,7 +1249,6 @@ def react_message(request):
     return JsonResponse({"status": "ok", "action": action, "reactions": summary})
 
 
-@csrf_exempt
 @require_POST
 def forward_message(request):
     """Copy a message into another chat (text or photo reference, marked Forwarded)."""
@@ -1320,7 +1312,6 @@ def forward_message(request):
     return JsonResponse({"status": "ok"})
 
 
-@csrf_exempt
 def set_typing(request):
     if request.method != 'POST':
         return JsonResponse({"status": "error"})
@@ -1379,7 +1370,6 @@ def _presence_label(last_seen):
         return 'Last seen recently'
 
 
-@csrf_exempt
 def heartbeat(request):
     """Keep the current user's session fresh so others see 'Active now'."""
     if request.method != 'POST':
@@ -1453,7 +1443,6 @@ def _prune_call_signals():
         logger.error(f'Call signal prune error: {e}')
 
 
-@csrf_exempt
 def send_call_signal(request):
     if request.method != 'POST':
         return JsonResponse({"status": "error", "message": "POST only"}, status=405)
@@ -1539,7 +1528,6 @@ def get_call_signals(request):
 
 # ── Admin Dashboard ──────────────────────────────────────────────────────────
 
-@csrf_exempt
 @admin_required
 def admin_users_toggle(request):
     if request.method != 'POST':
@@ -1594,7 +1582,6 @@ def admin_chart_data(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@csrf_exempt
 @admin_required
 def admin_announce_create(request):
     if request.method != 'POST':
@@ -1618,7 +1605,6 @@ def admin_announce_create(request):
     }})
 
 
-@csrf_exempt
 @admin_required
 def admin_announce_toggle(request):
     if request.method != 'POST':
@@ -1638,7 +1624,6 @@ def admin_announce_toggle(request):
     return JsonResponse({'status': 'ok', 'is_active': a.is_active})
 
 
-@csrf_exempt
 @admin_required
 def admin_announce_delete(request):
     if request.method != 'POST':
@@ -1653,7 +1638,6 @@ def admin_announce_delete(request):
     return JsonResponse({'status': 'ok'})
 
 
-@csrf_exempt
 @admin_required
 def admin_users_create(request):
     """Create login credentials with just username + password.
@@ -1692,7 +1676,6 @@ def admin_users_create(request):
     }})
 
 
-@csrf_exempt
 @admin_required
 def admin_users_delete(request):
     if request.method != 'POST':
@@ -1795,7 +1778,6 @@ def console_admin_required(view_func):
     return wrapper
 
 
-@csrf_exempt
 def admin_console(request):
     if request.method == 'POST':
         action = request.POST.get('action', 'login')
@@ -2059,7 +2041,6 @@ def admin_server_health(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@csrf_exempt
 def save_location(request):
     if request.method != 'POST':
         return JsonResponse({'status': 'error'}, status=405)
@@ -2078,7 +2059,6 @@ def save_location(request):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
 
-@csrf_exempt
 @admin_required
 def admin_maintenance_toggle(request):
     if request.method == 'POST':
