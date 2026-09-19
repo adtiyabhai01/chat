@@ -1873,12 +1873,27 @@ def admin_stats(request):
 
 @admin_required
 def admin_logs(request):
+    # NOTE: logs are append-only — nothing here (or anywhere else in the
+    # codebase) ever deletes AppLog rows. `limit` only controls how many
+    # are *displayed*, never what is stored.
     try:
         level_filter = request.GET.get('level', '')
+        limit_raw = (request.GET.get('limit') or '50').strip().lower()
         qs = AppLog.objects.all().order_by('-timestamp')
         if level_filter:
             qs = qs.filter(level=level_filter.upper())
-        logs = qs[:100]
+        total = qs.count()
+        if limit_raw == 'all':
+            cap = 5000
+            limit_out = 'all'
+        else:
+            try:
+                cap = int(limit_raw)
+            except (ValueError, TypeError):
+                cap = 50
+            cap = max(1, min(cap, 5000))
+            limit_out = cap
+        logs = qs[:cap]
         logs_data = [
             {
                 'time': _ist_full(log.timestamp),
@@ -1891,10 +1906,10 @@ def admin_logs(request):
             }
             for log in logs
         ]
-        return JsonResponse({'logs': logs_data})
+        return JsonResponse({'logs': logs_data, 'total': total, 'limit': limit_out})
     except Exception as e:
         logger.error(f'Error fetching admin logs: {str(e)}')
-        return JsonResponse({"logs": [], "error": str(e)}, status=500)
+        return JsonResponse({"logs": [], "total": 0, "error": str(e)}, status=500)
 
 
 @admin_required
