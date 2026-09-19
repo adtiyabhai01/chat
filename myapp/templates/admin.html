@@ -229,6 +229,7 @@
                     <tbody id="logsBody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
                 </table>
             </div>
+            <div class="logs-pager" id="logsPager"></div>
         </div>
     </div>
 
@@ -782,10 +783,30 @@ function loadOnline() {
     .catch(() => {});
 }
 
-/* logs: default 50 on screen, dropdown below offers 50 / 100 / 200 / All */
+/* logs: default 50/page, header dropdown 50/100/200/All, pager below table */
 var currentLogLevel = 'all';
-function loadLogs(level, btn, limit) {
-    if (level) currentLogLevel = level;
+var currentLogPage = 1;
+function logGo(p) { loadLogs(null, null, null, p); }
+function renderLogsPager(page, pages) {
+    var el = document.getElementById('logsPager');
+    if (!el) return;
+    if (!pages || pages <= 1) { el.innerHTML = ''; return; }
+    var nums = [];
+    var start = Math.max(1, Math.min(page - 2, pages - 4));
+    var end = Math.min(pages, start + 4);
+    start = Math.max(1, end - 4);
+    for (var i = start; i <= end; i++) nums.push(i);
+    el.innerHTML =
+        '<button class="filter-btn" ' + (page <= 1 ? 'disabled' : '') + ' onclick="logGo(' + (page - 1) + ')">‹ Prev</button>' +
+        nums.map(function (n) {
+            return '<button class="filter-btn' + (n === page ? ' active' : '') + '" onclick="logGo(' + n + ')">' + n + '</button>';
+        }).join('') +
+        '<button class="filter-btn" ' + (page >= pages ? 'disabled' : '') + ' onclick="logGo(' + (page + 1) + ')">Next ›</button>';
+}
+function loadLogs(level, btn, limit, page) {
+    if (level) { currentLogLevel = level; currentLogPage = 1; }
+    if (limit) currentLogPage = 1;
+    if (page) currentLogPage = page;
     var limSel = document.getElementById('logsLimit');
     var lim = limit || (limSel ? limSel.value : '50') || '50';
     if (limSel && limit) limSel.value = limit;
@@ -798,15 +819,18 @@ function loadLogs(level, btn, limit) {
                 (currentLogLevel === 'all' && b.textContent.trim().toLowerCase() === 'all')) b.classList.add('active');
         });
     }
-    const q = (currentLogLevel && currentLogLevel !== 'all') ? '?level=' + currentLogLevel + '&limit=' + lim : '?limit=' + lim;
+    const q = (currentLogLevel && currentLogLevel !== 'all') ? '?level=' + currentLogLevel + '&limit=' + lim + '&page=' + currentLogPage : '?limit=' + lim + '&page=' + currentLogPage;
     fetch('/admin-logs/' + q)
     .then(r => r.json())
     .then(d => {
         const tb = document.getElementById('logsBody');
         const logs = d.logs || [];
         const total = (typeof d.total === 'number') ? d.total : logs.length;
+        const pg = d.page || 1, pgs = d.pages || 1;
+        currentLogPage = pg;
         const cnt = document.getElementById('logsCount');
-        if (cnt) cnt.textContent = 'Showing ' + logs.length + ' of ' + total + ' logs';
+        if (cnt) cnt.textContent = 'Showing ' + logs.length + ' of ' + total + ' logs · Page ' + pg + ' of ' + pgs;
+        renderLogsPager(pg, pgs);
         if (!logs.length) { tb.innerHTML = '<tr><td colspan="4" class="empty-state">No logs</td></tr>'; return; }
         tb.innerHTML = logs.map(l => `
             <tr>

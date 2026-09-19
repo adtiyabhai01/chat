@@ -68,6 +68,13 @@ def _ist_full(ts):
     return _ist_str(ts, '%Y-%m-%d %H:%M:%S')
 
 
+def _ist_log(ts):
+    """Admin-log stamp: '19/09/2026 11:30:05 PM' (12-hour IST, DD/MM/YYYY)."""
+    s = _ist_str(ts, '%d/%m/%Y %I:%M:%S %p')
+    # Drop the hour's leading zero: ' 09:30' -> ' 9:30' (date keeps its zeros).
+    return s.replace(' 0', ' ', 1) if s else ''
+
+
 def _ist_min(ts):
     """IST stamp without seconds for admin tables: '2026-09-18 14:30'."""
     return _ist_str(ts, '%Y-%m-%d %H:%M')
@@ -1874,11 +1881,16 @@ def admin_stats(request):
 @admin_required
 def admin_logs(request):
     # NOTE: logs are append-only — nothing here (or anywhere else in the
-    # codebase) ever deletes AppLog rows. `limit` only controls how many
-    # are *displayed*, never what is stored.
+    # codebase) ever deletes AppLog rows. `limit`/`page` only control which
+    # slice is *displayed*, never what is stored.
     try:
+        import math
         level_filter = request.GET.get('level', '')
         limit_raw = (request.GET.get('limit') or '50').strip().lower()
+        try:
+            page = max(1, int(request.GET.get('page') or 1))
+        except (ValueError, TypeError):
+            page = 1
         qs = AppLog.objects.all().order_by('-timestamp')
         if level_filter:
             qs = qs.filter(level=level_filter.upper())
@@ -1893,10 +1905,13 @@ def admin_logs(request):
                 cap = 50
             cap = max(1, min(cap, 5000))
             limit_out = cap
-        logs = qs[:cap]
+        pages = max(1, math.ceil(total / cap))
+        page = min(page, pages)
+        offset = (page - 1) * cap
+        logs = qs[offset:offset + cap]
         logs_data = [
             {
-                'time': _ist_full(log.timestamp),
+                'time': _ist_log(log.timestamp),
                 'level': log.level,
                 'message': log.message,
                 'source': log.logger_name,
@@ -1906,10 +1921,13 @@ def admin_logs(request):
             }
             for log in logs
         ]
-        return JsonResponse({'logs': logs_data, 'total': total, 'limit': limit_out})
+        return JsonResponse({
+            'logs': logs_data, 'total': total, 'limit': limit_out,
+            'page': page, 'pages': pages, 'per_page': cap,
+        })
     except Exception as e:
         logger.error(f'Error fetching admin logs: {str(e)}')
-        return JsonResponse({"logs": [], "total": 0, "error": str(e)}, status=500)
+        return JsonResponse({"logs": [], "total": 0, "page": 1, "pages": 1, "error": str(e)}, status=500)
 
 
 @admin_required

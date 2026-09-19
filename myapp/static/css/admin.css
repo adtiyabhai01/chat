@@ -92,6 +92,9 @@ body::after { width: 380px; height: 380px; background: rgba(56, 189, 248, 0.12);
 .logs-select:focus { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 .logs-select option { background: #fff; color: var(--ink); font-weight: 600; }
 .logs-count { font-size: 11px; color: var(--faint); padding: 2px 2px 10px; }
+.logs-pager { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: center; padding: 14px 4px 2px; }
+.logs-pager .filter-btn:disabled { opacity: 0.35; cursor: default; }
+.logs-pager .filter-btn:disabled:hover { color: var(--sub); border-color: var(--stroke); box-shadow: none; }
 
 .log-level { display: inline-block; padding: 3px 10px; border-radius: 40px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .log-level.info { background: var(--info-soft); color: #0369a1; }
