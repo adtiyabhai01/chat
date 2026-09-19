@@ -171,8 +171,12 @@ function initEventListeners() {
         closeModal();
     });
     
-    // User search and filter
-    document.getElementById('searchUsers').addEventListener('input', filterUsers);
+    // User search and filter with debounce
+    var userSearchTimeout = null;
+    document.getElementById('searchUsers').addEventListener('input', function() {
+        clearTimeout(userSearchTimeout);
+        userSearchTimeout = setTimeout(filterUsers, 300);
+    });
     document.getElementById('filterStatus').addEventListener('change', filterUsers);
     
     // System controls
@@ -290,6 +294,9 @@ function renderUsers() {
         </tr>
     `).join('');
     
+    // Hide skeleton rows
+    tbody.querySelectorAll('.skeleton-row').forEach(r => r.remove());
+    
     renderPagination();
 }
 
@@ -377,6 +384,8 @@ function renderConversations(conversations) {
             ${conv.unread > 0 ? `<span class="status-badge status-active">${conv.unread} new</span>` : ''}
         </div>
     `).join('');
+    // Hide skeleton rows
+    list.querySelectorAll('.skeleton-row').forEach(r => r.remove());
 }
 
 async function loadChatMessages(userId, username) {
@@ -440,6 +449,8 @@ function renderReports(reports) {
             </div>
         </div>
     `).join('');
+    // Hide skeleton rows
+    container.querySelectorAll('.skeleton').forEach(r => r.remove());
 }
 
 function ignoreReport(reportId) {
@@ -555,6 +566,21 @@ function showToast(message, type = 'success') {
     setTimeout(() => {
         toast.classList.remove('show');
     }, 3000);
+}
+
+/* ---------- Dark mode toggle ---------- */
+function toggleDarkMode() {
+    const isDark = document.body.classList.toggle('dark-theme');
+    localStorage.setItem('adminDarkMode', isDark ? '1' : '0');
+    const toggleBtn = document.getElementById('themeToggle');
+    if (toggleBtn) toggleBtn.textContent = isDark ? '☀️' : '🌙';
+}
+
+// Load saved theme preference
+if (localStorage.getItem('adminDarkMode') === '1') {
+    document.body.classList.add('dark-theme');
+    const toggleBtn = document.getElementById('themeToggle');
+    if (toggleBtn) toggleBtn.textContent = '☀️';
 }
 
 // Resize chart on window resize

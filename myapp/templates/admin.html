@@ -56,7 +56,11 @@
         <h1><i class="fas fa-user-shield"></i> Admin Console</h1>
         <div class="header-actions">
             <span class="admin-chip"><i class="fas fa-user"></i> {{ admin_user }}</span>
-            <button class="btn" id="maintBtn" onclick="toggleMaintenance()"><i class="fas fa-tools"></i> <span id="maintText">Maintenance: …</span></button>
+            <button class="btn btn-secondary" id="maintBtn" onclick="toggleMaintenance()"><i class="fas fa-tools"></i> <span id="maintText">Maintenance: …</span></button>
+            <div class="theme-toggle" id="themeToggle" onclick="toggleDarkMode()" title="Toggle dark mode">
+                <span class="toggle-icon sun-icon">☀️</span>
+                <span class="toggle-icon moon-icon">🌙</span>
+            </div>
             <form action="{% url 'admin_console' %}" method="post" style="display:inline;">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="logout">
@@ -99,12 +103,37 @@
                 <div class="section-title"><i class="fas fa-wifi"></i> Online Sessions</div>
                 <button class="btn btn-secondary" onclick="loadOnline()"><i class="fas fa-sync"></i> Refresh</button>
             </div>
-            <div style="overflow-x:auto">
-                <table class="data-table">
-                    <thead><tr><th>Status</th><th>Name</th><th>Email</th><th>Device</th><th>Browser</th><th>Last seen</th></tr></thead>
-                    <tbody id="onlineBody"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
-                </table>
-            </div>
+<div style="overflow-x:auto">
+                    <table class="data-table">
+                        <thead><tr><th>Status</th><th>Name</th><th>Email</th><th>Device</th><th>Browser</th><th>Last seen</th></tr></thead>
+                        <tbody id="onlineBody">
+                            <tr class="table-skeleton-row">
+                                <td><div class="skeleton skeleton-badge"></div></td>
+                                <td><div class="skeleton skeleton-cell w-80"></div></td>
+                                <td><div class="skeleton skeleton-cell w-160"></div></td>
+                                <td><div class="skeleton skeleton-cell w-80"></div></td>
+                                <td><div class="skeleton skeleton-cell w-80"></div></td>
+                                <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            </tr>
+                            <tr class="table-skeleton-row">
+                                <td><div class="skeleton skeleton-badge"></div></td>
+                                <td><div class="skeleton skeleton-cell w-80"></div></td>
+                                <td><div class="skeleton skeleton-cell w-160"></div></td>
+                                <td><div class="skeleton skeleton-cell w-80"></div></td>
+                                <td><div class="skeleton skeleton-cell w-80"></div></td>
+                                <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            </tr>
+                            <tr class="table-skeleton-row">
+                                <td><div class="skeleton skeleton-badge"></div></td>
+                                <td><div class="skeleton skeleton-cell w-80"></div></td>
+                                <td><div class="skeleton skeleton-cell w-160"></div></td>
+                                <td><div class="skeleton skeleton-cell w-80"></div></td>
+                                <td><div class="skeleton skeleton-cell w-80"></div></td>
+                                <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
         </div>
     </div>
 
@@ -115,7 +144,7 @@
                 <div class="section-title"><i class="fas fa-users"></i> All Users</div>
                 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                     <button class="btn btn-secondary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New user</button>
-                    <input id="userSearch" class="users-search" type="text" placeholder="Search name or email…">
+                    <input id="userSearch" class="users-search" type="text" placeholder="Search name or email…" autocomplete="off">
                     <div class="colfilter-wrap">
                         <button class="btn btn-secondary" title="Choose columns" onclick="document.getElementById('colFilterMenu').classList.toggle('show')"><i class="fas fa-filter"></i></button>
                         <div class="colfilter-menu" id="colFilterMenu"></div>
@@ -125,44 +154,40 @@
             <div style="overflow-x:auto">
                 <table class="data-table" id="usersTable">
                     <thead><tr><th>Status</th><th>User</th><th>Email</th><th>Mobile</th><th>Password</th><th>Messages</th><th>Last seen</th><th>Access</th><th></th></tr></thead>
-                    <tbody>
-                        {% for x in users_data %}
-                        <tr id="row-{{ x.id }}" class="u-row{% if not x.is_active %} row-off{% endif %}" onclick="openUserDetail({{ x.id }})">
-                            <td style="white-space:nowrap">
-                                <span id="dot-{{ x.id }}" class="{% if x.is_active %}dot-online{% else %}dot-offline{% endif %}"></span>
-                                <span id="badge-{{ x.id }}" class="badge {% if x.is_active %}badge-online{% else %}badge-offline{% endif %}">{% if x.is_active %}Active{% else %}Off{% endif %}</span>
-                            </td>
-                            <td>
-                                <div class="u-cell">
-                                    <div class="u-av">{{ x.name|slice:":1" }}</div>
-                                    <div class="u-name">{{ x.name }}
-                                        <button class="copy-btn" title="Copy username" onclick="event.stopPropagation();copyText('{{ x.name|escapejs }}', this)"><i class="fas fa-copy"></i></button>
-                                        {% if x.is_online %} <span class="u-live">● online</span>{% endif %}
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="u-email">{{ x.email }}
-                                <button class="copy-btn" title="Copy email" onclick="event.stopPropagation();copyText('{{ x.email|escapejs }}', this)"><i class="fas fa-copy"></i></button>
-                            </td>
-                            <td>{{ x.mobile|default:"—" }}</td>
-                            <td style="white-space:nowrap"><span class="pw-cell">{{ x.password }}</span>
-                                <button class="copy-btn" title="Copy password" onclick="event.stopPropagation();copyText('{{ x.password|escapejs }}', this)"><i class="fas fa-copy"></i></button>
-                            </td>
-                            <td>{{ x.messages }}</td>
-                            <td style="color:var(--muted);font-size:11px;white-space:nowrap">{{ x.last_seen }}</td>
-                            <td>
-                            <select class="access-select {% if x.is_active %}on{% else %}off{% endif %}" onclick="event.stopPropagation()" onchange="toggleAccess({{ x.id }}, this)">
-                                <option value="1" {% if x.is_active %}selected{% endif %}>● Active</option>
-                                <option value="0" {% if not x.is_active %}selected{% endif %}>● Deactivated</option>
-                            </select>
-                        </td>
-                        <td>
-                            <button class="del-btn" title="Delete user" onclick="event.stopPropagation();deleteUser({{ x.id }}, '{{ x.name|escapejs }}')"><i class="fas fa-trash"></i></button>
-                        </td>
+                    <tbody id="usersTableBody">
+                        <tr class="table-skeleton-row">
+                            <td><div class="skeleton skeleton-badge"></div></td>
+                            <td><div class="skeleton skeleton-cell w-200"></div></td>
+                            <td><div class="skeleton skeleton-cell w-200"></div></td>
+                            <td><div class="skeleton skeleton-cell w-60"></div></td>
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            <td><div class="skeleton skeleton-cell w-60"></div></td>
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                            <td><div class="skeleton skeleton-cell w-40"></div></td>
                         </tr>
-                        {% empty %}
-                        <tr><td colspan="9" class="empty-state">No users found</td></tr>
-                        {% endfor %}
+                        <tr class="table-skeleton-row">
+                            <td><div class="skeleton skeleton-badge"></div></td>
+                            <td><div class="skeleton skeleton-cell w-200"></div></td>
+                            <td><div class="skeleton skeleton-cell w-200"></div></td>
+                            <td><div class="skeleton skeleton-cell w-60"></div></td>
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            <td><div class="skeleton skeleton-cell w-60"></div></td>
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                            <td><div class="skeleton skeleton-cell w-40"></div></td>
+                        </tr>
+                        <tr class="table-skeleton-row">
+                            <td><div class="skeleton skeleton-badge"></div></td>
+                            <td><div class="skeleton skeleton-cell w-200"></div></td>
+                            <td><div class="skeleton skeleton-cell w-200"></div></td>
+                            <td><div class="skeleton skeleton-cell w-60"></div></td>
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            <td><div class="skeleton skeleton-cell w-60"></div></td>
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                            <td><div class="skeleton skeleton-cell w-40"></div></td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -226,7 +251,26 @@
             <div style="overflow-x:auto">
                 <table class="data-table">
                     <thead><tr><th>Time</th><th>Level</th><th>Message</th><th>Source</th></tr></thead>
-                    <tbody id="logsBody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+                    <tbody id="logsBody">
+                        <tr class="table-skeleton-row">
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            <td><div class="skeleton skeleton-badge"></div></td>
+                            <td><div class="skeleton skeleton-cell w-full"></div></td>
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                        </tr>
+                        <tr class="table-skeleton-row">
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            <td><div class="skeleton skeleton-badge"></div></td>
+                            <td><div class="skeleton skeleton-cell w-full"></div></td>
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                        </tr>
+                        <tr class="table-skeleton-row">
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                            <td><div class="skeleton skeleton-badge"></div></td>
+                            <td><div class="skeleton skeleton-cell w-full"></div></td>
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                        </tr>
+                    </tbody>
                 </table>
             </div>
             <div class="logs-pager" id="logsPager"></div>
@@ -243,13 +287,17 @@
                     <button class="btn btn-secondary" onclick="loadStorage()"><i class="fas fa-sync"></i> Refresh</button>
                 </div>
             </div>
-            <div id="storageContent"><div class="empty-state">Loading…</div></div>
+            <div id="storageContent"><div class="health-grid">
+                        <div class="health-item"><div class="health-label">Chat Photos</div><div class="skeleton skeleton-cell w-60" style="height:28px;margin-top:8px"></div><div class="skeleton skeleton-cell w-100" style="height:12px;margin-top:6px"></div></div>
+                        <div class="health-item"><div class="health-label">Avatars</div><div class="skeleton skeleton-cell w-60" style="height:28px;margin-top:8px"></div><div class="skeleton skeleton-cell w-100" style="height:12px;margin-top:6px"></div></div>
+                        <div class="health-item"><div class="health-label">ImageKit</div><div class="skeleton skeleton-cell w-60" style="height:28px;margin-top:8px"></div><div class="skeleton skeleton-cell w-100" style="height:12px;margin-top:6px"></div></div>
+                    </div></div>
         </div>
         <div class="section">
             <div class="section-header">
                 <div class="section-title"><i class="fas fa-crown"></i> Top Uploaders</div>
             </div>
-            <div id="storageTop"><div class="empty-state">Loading…</div></div>
+            <div id="storageTop"><div class="skeleton" style="height:36px;border-radius:14px;margin-bottom:8px"></div><div class="skeleton" style="height:36px;border-radius:14px;margin-bottom:8px"></div><div class="skeleton" style="height:36px;border-radius:14px"></div></div>
         </div>
         <div class="section">
             <div class="section-header">
@@ -258,7 +306,20 @@
             <div style="overflow-x:auto">
                 <table class="data-table">
                     <thead><tr><th>From</th><th>To</th><th>Caption</th><th>Time</th></tr></thead>
-                    <tbody id="storageRecent"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+                    <tbody id="storageRecent">
+                        <tr class="table-skeleton-row">
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                            <td><div class="skeleton skeleton-cell w-full"></div></td>
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                        </tr>
+                        <tr class="table-skeleton-row">
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                            <td><div class="skeleton skeleton-cell w-80"></div></td>
+                            <td><div class="skeleton skeleton-cell w-full"></div></td>
+                            <td><div class="skeleton skeleton-cell w-120"></div></td>
+                        </tr>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -274,7 +335,12 @@
                     <button class="btn btn-secondary" onclick="loadHealth()"><i class="fas fa-sync"></i> Refresh</button>
                 </div>
             </div>
-            <div id="healthContent"><div class="empty-state">Loading…</div></div>
+            <div id="healthContent"><div class="health-grid">
+                    <div class="health-item"><div class="health-label">CPU</div><div class="skeleton skeleton-cell w-60" style="height:28px;margin-top:8px"></div><div class="health-bar"><div class="skeleton" style="height:6px;border-radius:4px"></div></div></div>
+                    <div class="health-item"><div class="health-label">Memory</div><div class="skeleton skeleton-cell w-60" style="height:28px;margin-top:8px"></div><div class="health-bar"><div class="skeleton" style="height:6px;border-radius:4px"></div></div></div>
+                    <div class="health-item"><div class="health-label">Disk</div><div class="skeleton skeleton-cell w-60" style="height:28px;margin-top:8px"></div><div class="health-bar"><div class="skeleton" style="height:6px;border-radius:4px"></div></div></div>
+                    <div class="health-item"><div class="health-label">Uptime</div><div class="skeleton skeleton-cell w-60" style="height:28px;margin-top:8px"></div></div>
+                </div></div>
         </div>
         <div class="section">
             <div class="section-header">
@@ -964,6 +1030,64 @@ loadStorage();
     }
 })();
 fetch('/admin-maintenance/').then(r => r.json()).then(d => updateMaintUI(!!d.maintenance)).catch(() => {});
+
+/* ---------- dark mode toggle ---------- */
+function toggleDarkMode() {
+    const isDark = document.body.classList.toggle('dark-theme');
+    localStorage.setItem('adminDarkMode', isDark ? '1' : '0');
+}
+// Restore saved theme
+(function() {
+    if (localStorage.getItem('adminDarkMode') === '1') {
+        document.body.classList.add('dark-theme');
+    }
+})();
+
+/* ---------- search debounce ---------- */
+var userSearchTimeout = null;
+document.getElementById('userSearch').addEventListener('input', function() {
+    clearTimeout(userSearchTimeout);
+    userSearchTimeout = setTimeout(function() {
+        var q = document.getElementById('userSearch').value.toLowerCase();
+        document.querySelectorAll('#usersTable tbody tr').forEach(function(tr) {
+            tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+        });
+    }, 300);
+});
+
+/* ---------- hide skeletons when data loads ---------- */
+function hideSkeletons() {
+    document.querySelectorAll('.table-skeleton-row').forEach(function(row) { row.style.display = 'none'; });
+    document.querySelectorAll('.skeleton').forEach(function(el) { if (el.parentElement) el.style.display = 'none'; });
+}
+window.addEventListener('load', hideSkeletons);
+
+/* ---------- auto-hide skeletons after data fetch ---------- */
+var originalLoadOnline = loadOnline;
+loadOnline = function() {
+    originalLoadOnline();
+    setTimeout(hideSkeletons, 500);
+};
+var originalLoadCharts = loadCharts;
+loadCharts = function() {
+    originalLoadCharts();
+    setTimeout(hideSkeletons, 500);
+};
+var originalLoadLogs = loadLogs;
+loadLogs = function() {
+    originalLoadLogs();
+    setTimeout(hideSkeletons, 500);
+};
+var originalLoadStorage = loadStorage;
+loadStorage = function() {
+    originalLoadStorage();
+    setTimeout(hideSkeletons, 500);
+};
+var originalLoadHealth = loadHealth;
+loadHealth = function() {
+    originalLoadHealth();
+    setTimeout(hideSkeletons, 500);
+};
 </script>
 </body>
 {% endif %}

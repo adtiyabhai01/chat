@@ -149,6 +149,62 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.16); border-radius: 8px; }
 
+/* ---------- dark theme ---------- */
+body.dark-theme {
+    --ink: #e2e8f0;
+    --sub: #94a3b8;
+    --faint: #64748b;
+    --muted: #94a3b8;
+    --glass: rgba(30, 41, 59, 0.7);
+    --glass-strong: rgba(30, 41, 59, 0.85);
+    --glass-soft: rgba(30, 41, 59, 0.5);
+    --stroke: rgba(148, 163, 184, 0.15);
+    --stroke-soft: rgba(148, 163, 184, 0.1);
+    --accent-soft: rgba(79, 70, 229, 0.15);
+    --accent-line: rgba(79, 70, 229, 0.35);
+    --success-soft: rgba(5, 150, 105, 0.15);
+    --warning-soft: rgba(217, 119, 6, 0.15);
+    --error-soft: rgba(220, 38, 38, 0.15);
+    --info-soft: rgba(2, 132, 199, 0.15);
+    background: linear-gradient(160deg, #0f172a 0%, #1e293b 48%, #0f172a 100%);
+    background-attachment: fixed;
+}
+body.dark-theme .umodal {
+    background: rgba(30, 41, 59, 0.94);
+}
+body.dark-theme .health-item {
+    background: rgba(30, 41, 59, 0.6);
+}
+body.dark-theme .data-table tbody tr:hover {
+    background: rgba(79, 70, 229, 0.08);
+}
+body.dark-theme .colfilter-menu {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: rgba(148, 163, 184, 0.15);
+}
+body.dark-theme .colfilter-menu label {
+    color: var(--ink);
+}
+body.dark-theme .access-select {
+    background: rgba(30, 41, 59, 0.7);
+    color: var(--ink);
+}
+body.dark-theme .filter-btn {
+    background: rgba(30, 41, 59, 0.5);
+    color: var(--sub);
+    border-color: var(--stroke);
+}
+body.dark-theme .filter-btn:hover, body.dark-theme .filter-btn.active {
+    color: #fff;
+}
+body.dark-theme .users-search {
+    background: rgba(30, 41, 59, 0.5);
+    color: var(--ink);
+    border-color: var(--stroke);
+}
+body.dark-theme .users-search::placeholder { color: var(--faint); }
+body.dark-theme .users-search:focus { background: rgba(30, 41, 59, 0.8); }
+
 /* ---------- auth page ambient orbs (existing markup) ---------- */
 .orb2 {
     position: fixed; border-radius: 50%;
