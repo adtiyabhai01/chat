@@ -80,8 +80,29 @@ def _ist_day_start_utc():
     and miscounts near midnight IST.
     """
     from django.utils import timezone
+    from datetime import timezone as _dt_tz
     now_ist = _ist(timezone.now())
-    return now_ist.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+    return now_ist.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(_dt_tz.utc)
+
+
+# ── Schema resilience (zero-downtime deploys) ──────────────────────────
+# If new code reaches production before `migrate 0014` has run, Postgres
+# raises "column myapp_message.reply_to_id does not exist" (or
+# is_deleted/edited_at/forwarded, or relation myapp_messagereaction).
+# Instead of 500ing every poll, detect that specific error and retry the
+# query without the new 0014 fields. Once migrate runs, the fast path
+# succeeds again automatically — no restart needed.
+_MSG_POWER_FIELDS = ('reply_to', 'edited_at', 'forwarded', 'is_deleted')
+
+
+def _is_missing_schema_error(e):
+    s = str(e).lower()
+    return (
+        'does not exist' in s
+        or 'undefinedcolumn' in s
+        or 'no such column' in s
+        or 'no such table' in s
+    )
 
 
 def custom_login_required(view_func):
@@ -400,9 +421,9 @@ def _recent_map(user, limit=300):
             oid = m.receiver_id if m.sender_id == user.id else m.sender_id
             if oid in out:
                 continue
-            if m.is_deleted:
+            if getattr(m, 'is_deleted', False):
                 text = 'This message was deleted'
-            elif m.kind == 'image':
+            elif getattr(m, 'kind', 'text') == 'image':
                 text = 'Photo' + (f" — {m.text}" if m.text else '')
             else:
                 text = m.text or ''
@@ -419,6 +440,36 @@ def _recent_map(user, limit=300):
                 when = _ist_str(ts, '%d %b')
             out[oid] = {'text': text, 'time': when}
     except Exception as e:
+        if _is_missing_schema_error(e):
+            # Prod DB predates migrate 0014: retry without the new columns.
+            try:
+                recent = list(Message.objects.filter(
+                    Q(sender=user) | Q(receiver=user)
+                ).select_related('sender', 'receiver').defer(*_MSG_POWER_FIELDS).order_by('-timestamp')[:limit])
+                for m in recent:
+                    oid = m.receiver_id if m.sender_id == user.id else m.sender_id
+                    if oid in out:
+                        continue
+                    text = m.text or ''
+                    if getattr(m, 'kind', 'text') == 'image' and 'Photo' not in text[:5]:
+                        text = 'Photo' + (f" — {text}" if text else '')
+                    if len(text) > 42:
+                        text = text[:42].rstrip() + '…'
+                    if m.sender_id == user.id:
+                        text = 'You: ' + text
+                    ts = m.timestamp
+                    if _ist_date(ts) == today:
+                        when = _t12(ts)
+                    elif _ist_date(ts) == today - timedelta(days=1):
+                        when = 'Yesterday'
+                    else:
+                        when = _ist_str(ts, '%d %b')
+                    out[oid] = {'text': text, 'time': when}
+                logger.warning('Recent map: 0014 columns missing, served legacy preview. Run migrate.')
+                return out
+            except Exception as e2:
+                logger.error(f'Recent map error: {e2}')
+                return out
         logger.error(f'Recent map error: {e}')
     return out
 
@@ -507,10 +558,22 @@ def start_chat(request, user_id):
 
     messages = []
     if chat:
-        messages = Message.objects.filter(
-            (Q(sender=current_user) & Q(receiver=other_user)) |
-            (Q(sender=other_user) & Q(receiver=current_user))
-        ).order_by('timestamp')
+        try:
+            messages = Message.objects.filter(
+                (Q(sender=current_user) & Q(receiver=other_user)) |
+                (Q(sender=other_user) & Q(receiver=current_user))
+            ).order_by('timestamp')
+            # Force evaluation inside try so a stale DB (pre-0014) falls back.
+            messages = list(messages)
+        except Exception as e:
+            if _is_missing_schema_error(e):
+                messages = list(Message.objects.filter(
+                    (Q(sender=current_user) & Q(receiver=other_user)) |
+                    (Q(sender=other_user) & Q(receiver=current_user))
+                ).defer(*_MSG_POWER_FIELDS).order_by('timestamp'))
+                logger.warning('start_chat: 0014 columns missing, served legacy history. Run migrate.')
+            else:
+                raise
 
     context = {
         'other_user': other_user,
@@ -559,12 +622,25 @@ def send_message(request):
         logger.error(f'Receiver not found: {receiver_id}')
         return JsonResponse({"status": "error", "message": "Receiver not found"})
 
-    Message.objects.create(
-        sender=sender,
-        receiver=receiver,
-        text=message_text,
-        reply_to=_resolve_reply(user_id, receiver.id, data.get("reply_to")),
-    )
+    try:
+        Message.objects.create(
+            sender=sender,
+            receiver=receiver,
+            text=message_text,
+            reply_to=_resolve_reply(user_id, receiver.id, data.get("reply_to")),
+        )
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            # Old DB without reply_to column: send as plain message.
+            try:
+                Message.objects.create(sender=sender, receiver=receiver, text=message_text)
+            except Exception as e2:
+                logger.error(f'Message send failed: {e2}')
+                return JsonResponse({"status": "error", "message": "Could not send. DB migration pending."}, status=500)
+            logger.warning('send_message: reply_to column missing, sent without quote. Run migrate.')
+        else:
+            logger.error(f'Message send failed: {e}')
+            return JsonResponse({"status": "error", "message": "Could not send"}, status=500)
     logger.info(f'Message sent: {sender.name} -> {receiver.name} ({len(message_text)} chars)')
     return JsonResponse({"status": "success"})
 
@@ -666,28 +742,41 @@ def get_messages(request, user_id):
         # Latest 300 only: keeps every poll payload + DOM small and smooth.
         # (Older history stays in the DB.)
         from django.utils import timezone
-        messages = list(Message.objects.filter(
-            Q(sender_id=current_user_id, receiver_id=user_id) |
-            Q(sender_id=user_id, receiver_id=current_user_id)
-        ).select_related('sender', 'reply_to', 'reply_to__sender').order_by('-timestamp')[:300])
+        try:
+            messages = list(Message.objects.filter(
+                Q(sender_id=current_user_id, receiver_id=user_id) |
+                Q(sender_id=user_id, receiver_id=current_user_id)
+            ).select_related('sender', 'reply_to', 'reply_to__sender').order_by('-timestamp')[:300])
+        except Exception as e:
+            if not _is_missing_schema_error(e):
+                raise
+            # Legacy DB (pre-0014): fetch without the new columns.
+            messages = list(Message.objects.filter(
+                Q(sender_id=current_user_id, receiver_id=user_id) |
+                Q(sender_id=user_id, receiver_id=current_user_id)
+            ).select_related('sender').defer(*_MSG_POWER_FIELDS).order_by('-timestamp')[:300])
+            logger.warning('get_messages: 0014 columns missing, served legacy payload. Run migrate.')
         messages.reverse()
-        reactions = _reactions_map(messages, current_user_id)
+        try:
+            reactions = _reactions_map(messages, current_user_id)
+        except Exception:
+            reactions = {}
         data = [
             {
                 "id": msg.id,
                 "sender": msg.sender_id,
                 "message": msg.text,
-                "kind": msg.kind,
-                "image": msg.image_url,
+                "kind": getattr(msg, 'kind', 'text'),
+                "image": getattr(msg, 'image_url', ''),
                 # IST: the bubble must show the real Indian send time,
                 # not the raw UTC value stored in the DB.
                 "time": _t12(msg.timestamp),
                 "date": _ist_ymd(msg.timestamp),
                 "is_read": msg.is_read,
                 "reply": _reply_payload(msg, current_user_id),
-                "edited": msg.edited_at is not None,
-                "forwarded": msg.forwarded,
-                "deleted": msg.is_deleted,
+                "edited": getattr(msg, 'edited_at', None) is not None,
+                "forwarded": bool(getattr(msg, 'forwarded', False)),
+                "deleted": bool(getattr(msg, 'is_deleted', False)),
                 "reactions": reactions.get(msg.id, []),
             }
             for msg in messages
@@ -838,11 +927,25 @@ def send_image(request):
     except Exception as e:
         logger.error(f'ImageKit upload failed: {e}')
         return JsonResponse({"status": "error", "message": "Upload failed, try again"}, status=500)
-    msg = Message.objects.create(
-        sender=sender, receiver=receiver, text=caption,
-        kind='image', image_url=url, image_file_id=fid or '',
-        reply_to=_resolve_reply(user_id, receiver_id, request.POST.get('reply_to')),
-    )
+    try:
+        msg = Message.objects.create(
+            sender=sender, receiver=receiver, text=caption,
+            kind='image', image_url=url, image_file_id=fid or '',
+            reply_to=_resolve_reply(user_id, receiver_id, request.POST.get('reply_to')),
+        )
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            try:
+                msg = Message.objects.create(
+                    sender=sender, receiver=receiver, text=caption,
+                    kind='image', image_url=url, image_file_id=fid or '',
+                )
+            except Exception as e2:
+                logger.error(f'Image send failed: {e2}')
+                return JsonResponse({"status": "error", "message": "Could not send. DB migration pending."}, status=500)
+            logger.warning('send_image: reply_to column missing, sent without quote. Run migrate.')
+        else:
+            raise
     logger.info(f'Image sent: {sender.name} -> {receiver.name}')
     return JsonResponse({"status": "success", "id": msg.id, "url": url})
 
@@ -858,8 +961,17 @@ def _resolve_reply(user_id, other_id, reply_id):
     if not rid:
         return None
     try:
-        target = Message.objects.select_related('sender').get(id=rid, is_deleted=False)
+        try:
+            target = Message.objects.select_related('sender').get(id=rid, is_deleted=False)
+        except Exception as e:
+            if _is_missing_schema_error(e):
+                # Legacy DB: no is_deleted column — accept any same-thread target.
+                target = Message.objects.select_related('sender').get(id=rid)
+            else:
+                raise
     except Message.DoesNotExist:
+        return None
+    except Exception:
         return None
     pair = {target.sender_id, target.receiver_id}
     if pair != {int(user_id), int(other_id)}:
@@ -872,43 +984,62 @@ def _reactions_map(messages, current_user_id):
     grouped = {}
     if not messages:
         return grouped
-    rows = MessageReaction.objects.filter(
-        message_id__in=[m.id for m in messages]
-    ).values('message_id', 'emoji', 'user_id')
-    per_msg = {}
-    for r in rows:
-        per_msg.setdefault(r['message_id'], []).append(r)
-    for m in messages:
-        chips = {}
-        for r in per_msg.get(m.id, []):
-            c = chips.setdefault(r['emoji'], {'emoji': r['emoji'], 'count': 0, 'mine': False})
-            c['count'] += 1
-            if r['user_id'] == current_user_id:
-                c['mine'] = True
-        grouped[m.id] = sorted(chips.values(), key=lambda c: -c['count'])
+    try:
+        rows = MessageReaction.objects.filter(
+            message_id__in=[m.id for m in messages]
+        ).values('message_id', 'emoji', 'user_id')
+        per_msg = {}
+        for r in rows:
+            per_msg.setdefault(r['message_id'], []).append(r)
+        for m in messages:
+            chips = {}
+            for r in per_msg.get(m.id, []):
+                c = chips.setdefault(r['emoji'], {'emoji': r['emoji'], 'count': 0, 'mine': False})
+                c['count'] += 1
+                if r['user_id'] == current_user_id:
+                    c['mine'] = True
+            grouped[m.id] = sorted(chips.values(), key=lambda c: -c['count'])
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            logger.warning('Reactions table missing, serving without reactions. Run migrate.')
+            return {}
+        raise
     return grouped
 
 
 def _reply_payload(msg, current_user_id):
     """Quoted-message snippet for a bubble, or None."""
-    ref = getattr(msg, 'reply_to', None)
-    if ref is None:
-        try:
-            ref = Message.objects.select_related('sender').get(id=msg.reply_to_id)
-        except (Message.DoesNotExist, ValueError, TypeError):
-            return None
-    if ref.is_deleted:
-        text = 'This message was deleted'
-    elif ref.kind == 'image':
-        text = 'Photo' + (f" — {ref.text[:60]}" if ref.text else '')
-    else:
-        text = (ref.text or '')[:80]
-    return {
-        'id': ref.id,
-        'name': 'You' if ref.sender_id == current_user_id else ref.sender.name,
-        'text': text,
-        'deleted': ref.is_deleted,
-    }
+    try:
+        ref = getattr(msg, 'reply_to', None)
+        if ref is None:
+            try:
+                rid = getattr(msg, 'reply_to_id', None)
+            except Exception:
+                return None
+            if not rid:
+                return None
+            try:
+                ref = Message.objects.select_related('sender').get(id=rid)
+            except (Message.DoesNotExist, ValueError, TypeError):
+                return None
+            except Exception as e:
+                if _is_missing_schema_error(e):
+                    return None
+                raise
+        if getattr(ref, 'is_deleted', False):
+            text = 'This message was deleted'
+        elif getattr(ref, 'kind', 'text') == 'image':
+            text = 'Photo' + (f" — {ref.text[:60]}" if ref.text else '')
+        else:
+            text = (ref.text or '')[:80]
+        return {
+            'id': ref.id,
+            'name': 'You' if ref.sender_id == current_user_id else ref.sender.name,
+            'text': text,
+            'deleted': bool(getattr(ref, 'is_deleted', False)),
+        }
+    except Exception:
+        return None
 
 
 def _delete_image_file_if_orphan(fid):
@@ -944,17 +1075,29 @@ def delete_message(request):
         msg = Message.objects.get(id=data.get('message_id'))
     except (Message.DoesNotExist, ValueError, TypeError):
         return JsonResponse({"status": "error", "message": "Message not found"}, status=404)
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse({"status": "error", "message": "Delete unavailable: DB migration pending"}, status=503)
+        raise
     if msg.sender_id != user_id:
         return JsonResponse({"status": "error", "message": "You can only delete your own messages"}, status=403)
-    if msg.is_deleted:
-        return JsonResponse({"status": "ok"})
-    fid = msg.image_file_id if msg.kind == 'image' else ''
-    msg.is_deleted = True
-    msg.text = ''
-    msg.image_url = ''
-    msg.image_file_id = ''
-    msg.save(update_fields=['is_deleted', 'text', 'image_url', 'image_file_id'])
-    MessageReaction.objects.filter(message=msg).delete()
+    try:
+        if getattr(msg, 'is_deleted', False):
+            return JsonResponse({"status": "ok"})
+        fid = msg.image_file_id if getattr(msg, 'kind', 'text') == 'image' else ''
+        msg.is_deleted = True
+        msg.text = ''
+        msg.image_url = ''
+        msg.image_file_id = ''
+        msg.save(update_fields=['is_deleted', 'text', 'image_url', 'image_file_id'])
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse({"status": "error", "message": "Delete unavailable: DB migration pending"}, status=503)
+        raise
+    try:
+        MessageReaction.objects.filter(message=msg).delete()
+    except Exception:
+        pass
     _delete_image_file_if_orphan(fid)
     logger.info(f'Message {msg.id} deleted for everyone by user {user_id}')
     return JsonResponse({"status": "ok"})
@@ -979,17 +1122,26 @@ def edit_message(request):
         msg = Message.objects.get(id=data.get('message_id'))
     except (Message.DoesNotExist, ValueError, TypeError):
         return JsonResponse({"status": "error", "message": "Message not found"}, status=404)
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse({"status": "error", "message": "Edit unavailable: DB migration pending"}, status=503)
+        raise
     if msg.sender_id != user_id:
         return JsonResponse({"status": "error", "message": "You can only edit your own messages"}, status=403)
-    if msg.is_deleted or msg.kind != 'text':
-        return JsonResponse({"status": "error", "message": "This message can't be edited"}, status=400)
-    text = (data.get('content') or '').strip()[:2000]
-    if not text:
-        return JsonResponse({"status": "error", "message": "Message is empty"}, status=400)
-    from django.utils import timezone
-    msg.text = text
-    msg.edited_at = timezone.now()
-    msg.save(update_fields=['text', 'edited_at'])
+    try:
+        if getattr(msg, 'is_deleted', False) or getattr(msg, 'kind', 'text') != 'text':
+            return JsonResponse({"status": "error", "message": "This message can't be edited"}, status=400)
+        text = (data.get('content') or '').strip()[:2000]
+        if not text:
+            return JsonResponse({"status": "error", "message": "Message is empty"}, status=400)
+        from django.utils import timezone
+        msg.text = text
+        msg.edited_at = timezone.now()
+        msg.save(update_fields=['text', 'edited_at'])
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse({"status": "error", "message": "Edit unavailable: DB migration pending"}, status=503)
+        raise
     return JsonResponse({"status": "ok"})
 
 
@@ -1015,20 +1167,36 @@ def react_message(request):
     if emoji not in REACT_EMOJIS:
         return JsonResponse({"status": "error", "message": "Invalid emoji"}, status=400)
     try:
-        msg = Message.objects.get(id=data.get('message_id'), is_deleted=False)
+        try:
+            msg = Message.objects.get(id=data.get('message_id'), is_deleted=False)
+        except Exception as e:
+            if _is_missing_schema_error(e):
+                # Legacy DB: fetch without the is_deleted filter.
+                msg = Message.objects.get(id=data.get('message_id'))
+            else:
+                raise
     except (Message.DoesNotExist, ValueError, TypeError):
         return JsonResponse({"status": "error", "message": "Message not found"}, status=404)
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse({"status": "error", "message": "Reactions unavailable: DB migration pending"}, status=503)
+        raise
     if msg.sender_id != user_id and msg.receiver_id != user_id:
         return JsonResponse({"status": "error", "message": "Not your conversation"}, status=403)
-    existing = MessageReaction.objects.filter(message=msg, user_id=user_id).first()
-    if existing is not None and existing.emoji == emoji:
-        existing.delete()
-        action = 'removed'
-    else:
-        MessageReaction.objects.update_or_create(
-            message=msg, user_id=user_id, defaults={'emoji': emoji})
-        action = 'added'
-    summary = _reactions_map([msg], user_id).get(msg.id, [])
+    try:
+        existing = MessageReaction.objects.filter(message=msg, user_id=user_id).first()
+        if existing is not None and existing.emoji == emoji:
+            existing.delete()
+            action = 'removed'
+        else:
+            MessageReaction.objects.update_or_create(
+                message=msg, user_id=user_id, defaults={'emoji': emoji})
+            action = 'added'
+        summary = _reactions_map([msg], user_id).get(msg.id, [])
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse({"status": "error", "message": "Reactions unavailable: DB migration pending"}, status=503)
+        raise
     return JsonResponse({"status": "ok", "action": action, "reactions": summary})
 
 
@@ -1048,9 +1216,19 @@ def forward_message(request):
     if _maintenance_on_for(request):
         return _maintenance_block()
     try:
-        src = Message.objects.get(id=data.get('message_id'), is_deleted=False)
+        try:
+            src = Message.objects.get(id=data.get('message_id'), is_deleted=False)
+        except Exception as e:
+            if _is_missing_schema_error(e):
+                src = Message.objects.get(id=data.get('message_id'))
+            else:
+                raise
     except (Message.DoesNotExist, ValueError, TypeError):
         return JsonResponse({"status": "error", "message": "Message not found"}, status=404)
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse({"status": "error", "message": "Forward unavailable: DB migration pending"}, status=503)
+        raise
     if src.sender_id != user_id and src.receiver_id != user_id:
         return JsonResponse({"status": "error", "message": "Not your conversation"}, status=403)
     try:
@@ -1059,11 +1237,30 @@ def forward_message(request):
         return JsonResponse({"status": "error", "message": "Receiver not found"}, status=404)
     if receiver.id == user_id:
         return JsonResponse({"status": "error", "message": "Can't forward to yourself"}, status=400)
-    Message.objects.create(
-        sender_id=user_id, receiver=receiver, text=src.text,
-        kind=src.kind, image_url=src.image_url, image_file_id=src.image_file_id,
-        forwarded=True,
-    )
+    try:
+        Message.objects.create(
+            sender_id=user_id, receiver=receiver, text=src.text,
+            kind=getattr(src, 'kind', 'text'),
+            image_url=getattr(src, 'image_url', ''),
+            image_file_id=getattr(src, 'image_file_id', ''),
+            forwarded=True,
+        )
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            # Legacy DB without forwarded column: copy as plain message.
+            try:
+                Message.objects.create(
+                    sender_id=user_id, receiver=receiver, text=src.text,
+                    kind=getattr(src, 'kind', 'text'),
+                    image_url=getattr(src, 'image_url', ''),
+                    image_file_id=getattr(src, 'image_file_id', ''),
+                )
+            except Exception as e2:
+                logger.error(f'Forward failed: {e2}')
+                return JsonResponse({"status": "error", "message": "Forward unavailable: DB migration pending"}, status=503)
+            logger.warning('forward_message: forwarded column missing, sent as plain copy. Run migrate.')
+        else:
+            raise
     return JsonResponse({"status": "ok"})
 
 
@@ -1483,15 +1680,31 @@ def admin_user_detail(request, user_id):
         recent = Message.objects.filter(
             Q(sender=u) | Q(receiver=u)
         ).select_related('sender', 'receiver').order_by('-timestamp')[:10]
-        recent_data = [
-            {
-                'direction': 'sent' if m.sender_id == u.id else 'received',
-                'other': m.receiver.name if m.sender_id == u.id else m.sender.name,
-                'text': m.text[:80],
-                'time': _ist_min(m.timestamp),
-            }
-            for m in recent
-        ]
+        try:
+            recent_data = [
+                {
+                    'direction': 'sent' if m.sender_id == u.id else 'received',
+                    'other': m.receiver.name if m.sender_id == u.id else m.sender.name,
+                    'text': m.text[:80],
+                    'time': _ist_min(m.timestamp),
+                }
+                for m in recent
+            ]
+        except Exception as e:
+            if not _is_missing_schema_error(e):
+                raise
+            recent = list(Message.objects.filter(
+                Q(sender=u) | Q(receiver=u)
+            ).select_related('sender', 'receiver').defer(*_MSG_POWER_FIELDS).order_by('-timestamp')[:10])
+            recent_data = [
+                {
+                    'direction': 'sent' if m.sender_id == u.id else 'received',
+                    'other': m.receiver.name if m.sender_id == u.id else m.sender.name,
+                    'text': m.text[:80],
+                    'time': _ist_min(m.timestamp),
+                }
+                for m in recent
+            ]
         return JsonResponse({
             'id': u.id,
             'name': u.name,
@@ -1669,13 +1882,26 @@ def admin_storage(request):
     """Storage dashboard: DB counts + live ImageKit usage (files & bytes)."""
     from django.db.models import Count
     try:
-        chat_images = Message.objects.filter(kind='image', is_deleted=False).count()
-        avatars = User.objects.exclude(avatar_url='').count()
-        top_rows = (Message.objects.filter(kind='image', is_deleted=False)
-                    .values('sender__name').annotate(c=Count('id')).order_by('-c')[:5])
-        top = [{'name': r['sender__name'] or '?', 'images': r['c']} for r in top_rows]
-        recent_rows = (Message.objects.filter(kind='image', is_deleted=False)
-                       .select_related('sender', 'receiver').order_by('-timestamp')[:10])
+        try:
+            chat_images = Message.objects.filter(kind='image', is_deleted=False).count()
+            avatars = User.objects.exclude(avatar_url='').count()
+            top_rows = (Message.objects.filter(kind='image', is_deleted=False)
+                        .values('sender__name').annotate(c=Count('id')).order_by('-c')[:5])
+            top = [{'name': r['sender__name'] or '?', 'images': r['c']} for r in top_rows]
+            recent_rows = (Message.objects.filter(kind='image', is_deleted=False)
+                           .select_related('sender', 'receiver').order_by('-timestamp')[:10])
+        except Exception as e:
+            if not _is_missing_schema_error(e):
+                raise
+            # Legacy DB without is_deleted: count all images.
+            chat_images = Message.objects.filter(kind='image').count()
+            avatars = User.objects.exclude(avatar_url='').count()
+            top_rows = (Message.objects.filter(kind='image')
+                        .values('sender__name').annotate(c=Count('id')).order_by('-c')[:5])
+            top = [{'name': r['sender__name'] or '?', 'images': r['c']} for r in top_rows]
+            recent_rows = (Message.objects.filter(kind='image')
+                           .select_related('sender', 'receiver').order_by('-timestamp')[:10])
+            logger.warning('admin_storage: is_deleted column missing, served legacy counts. Run migrate.')
         recent = [{
             'by': m.sender.name,
             'to': m.receiver.name,
