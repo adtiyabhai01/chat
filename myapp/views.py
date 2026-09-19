@@ -105,6 +105,53 @@ def _is_missing_schema_error(e):
     )
 
 
+def _legacy_insert_message(sender_id, receiver_id, text='', kind='text', image_url='', image_file_id=''):
+    """INSERT a message using only columns that actually exist in the DB.
+
+    Django's ORM INSERT always includes every model field, so on a stale
+    prod DB (pre-0014) even `create(text=...)` fails with
+    "column myapp_message.is_deleted does not exist". Raw SQL here lets
+    text/image sends keep working until `migrate` runs.
+    """
+    from django.db import connection
+    from django.utils import timezone
+    with connection.cursor() as cur:
+        existing = {c.name for c in connection.introspection.get_table_description(cur, 'myapp_message')}
+    data = {
+        'sender_id': int(sender_id),
+        'receiver_id': int(receiver_id),
+        'text': text or '',
+        'timestamp': timezone.now(),
+        'is_read': False,
+    }
+    if 'kind' in existing:
+        data['kind'] = kind or 'text'
+    if 'image_url' in existing:
+        data['image_url'] = image_url or ''
+    if 'image_file_id' in existing:
+        data['image_file_id'] = image_file_id or ''
+    # 0014 columns: include with safe defaults when the DB has them
+    # (new DB needs them for NOT NULL), skip when it doesn't (old DB).
+    if 'forwarded' in existing:
+        data['forwarded'] = False
+    if 'is_deleted' in existing:
+        data['is_deleted'] = False
+    if 'edited_at' in existing:
+        data['edited_at'] = None
+    if 'reply_to_id' in existing:
+        data['reply_to_id'] = None
+    cols = ', '.join(f'"{c}"' for c in data)
+    placeholders = ', '.join(['%s'] * len(data))
+    vals = list(data.values())
+    with connection.cursor() as cur:
+        if connection.vendor == 'postgresql':
+            cur.execute(f'INSERT INTO "myapp_message" ({cols}) VALUES ({placeholders}) RETURNING "id"', vals)
+            row = cur.fetchone()
+            return row[0] if row else None
+        cur.execute(f'INSERT INTO "myapp_message" ({cols}) VALUES ({placeholders})', vals)
+        return cur.lastrowid
+
+
 def custom_login_required(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -631,13 +678,14 @@ def send_message(request):
         )
     except Exception as e:
         if _is_missing_schema_error(e):
-            # Old DB without reply_to column: send as plain message.
+            # Stale DB: ORM INSERT includes 0014 columns -> retry as raw
+            # SQL with only existing columns (reply/quote dropped).
             try:
-                Message.objects.create(sender=sender, receiver=receiver, text=message_text)
+                _legacy_insert_message(sender.id, receiver.id, text=message_text)
             except Exception as e2:
                 logger.error(f'Message send failed: {e2}')
                 return JsonResponse({"status": "error", "message": "Could not send. DB migration pending."}, status=500)
-            logger.warning('send_message: reply_to column missing, sent without quote. Run migrate.')
+            logger.warning('send_message: 0014 columns missing, sent via legacy insert. Run migrate.')
         else:
             logger.error(f'Message send failed: {e}')
             return JsonResponse({"status": "error", "message": "Could not send"}, status=500)
@@ -933,21 +981,22 @@ def send_image(request):
             kind='image', image_url=url, image_file_id=fid or '',
             reply_to=_resolve_reply(user_id, receiver_id, request.POST.get('reply_to')),
         )
+        msg_id = msg.id
     except Exception as e:
         if _is_missing_schema_error(e):
             try:
-                msg = Message.objects.create(
-                    sender=sender, receiver=receiver, text=caption,
+                msg_id = _legacy_insert_message(
+                    sender.id, receiver.id, text=caption,
                     kind='image', image_url=url, image_file_id=fid or '',
                 )
             except Exception as e2:
                 logger.error(f'Image send failed: {e2}')
                 return JsonResponse({"status": "error", "message": "Could not send. DB migration pending."}, status=500)
-            logger.warning('send_image: reply_to column missing, sent without quote. Run migrate.')
+            logger.warning('send_image: 0014 columns missing, sent via legacy insert. Run migrate.')
         else:
             raise
     logger.info(f'Image sent: {sender.name} -> {receiver.name}')
-    return JsonResponse({"status": "success", "id": msg.id, "url": url})
+    return JsonResponse({"status": "success", "id": msg_id, "url": url})
 
 
 # ── Message powers (reply / edit / forward / react / delete-for-all) ────
@@ -1249,8 +1298,8 @@ def forward_message(request):
         if _is_missing_schema_error(e):
             # Legacy DB without forwarded column: copy as plain message.
             try:
-                Message.objects.create(
-                    sender_id=user_id, receiver=receiver, text=src.text,
+                _legacy_insert_message(
+                    user_id, receiver.id, text=src.text,
                     kind=getattr(src, 'kind', 'text'),
                     image_url=getattr(src, 'image_url', ''),
                     image_file_id=getattr(src, 'image_file_id', ''),
