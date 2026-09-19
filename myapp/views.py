@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import timedelta
 from django.views.decorators.http import require_POST
-from .models import User, Chat, Message, AppLog, UserSession, CallSignal, SiteSetting, Announcement
+from .models import User, Chat, Message, MessageReaction, AppLog, UserSession, CallSignal, SiteSetting, Announcement
 from .logging_service import get_logger
 
 logger = get_logger(__name__)
@@ -400,7 +400,9 @@ def _recent_map(user, limit=300):
             oid = m.receiver_id if m.sender_id == user.id else m.sender_id
             if oid in out:
                 continue
-            if m.kind == 'image':
+            if m.is_deleted:
+                text = 'This message was deleted'
+            elif m.kind == 'image':
                 text = 'Photo' + (f" — {m.text}" if m.text else '')
             else:
                 text = m.text or ''
@@ -560,7 +562,8 @@ def send_message(request):
     Message.objects.create(
         sender=sender,
         receiver=receiver,
-        text=message_text
+        text=message_text,
+        reply_to=_resolve_reply(user_id, receiver.id, data.get("reply_to")),
     )
     logger.info(f'Message sent: {sender.name} -> {receiver.name} ({len(message_text)} chars)')
     return JsonResponse({"status": "success"})
@@ -662,13 +665,13 @@ def get_messages(request, user_id):
 
         # Latest 300 only: keeps every poll payload + DOM small and smooth.
         # (Older history stays in the DB.)
+        from django.utils import timezone
         messages = list(Message.objects.filter(
             Q(sender_id=current_user_id, receiver_id=user_id) |
             Q(sender_id=user_id, receiver_id=current_user_id)
-        ).order_by('-timestamp')[:300])
+        ).select_related('sender', 'reply_to', 'reply_to__sender').order_by('-timestamp')[:300])
         messages.reverse()
-
-        from django.utils import timezone
+        reactions = _reactions_map(messages, current_user_id)
         data = [
             {
                 "id": msg.id,
@@ -680,7 +683,12 @@ def get_messages(request, user_id):
                 # not the raw UTC value stored in the DB.
                 "time": _t12(msg.timestamp),
                 "date": _ist_ymd(msg.timestamp),
-                "is_read": msg.is_read
+                "is_read": msg.is_read,
+                "reply": _reply_payload(msg, current_user_id),
+                "edited": msg.edited_at is not None,
+                "forwarded": msg.forwarded,
+                "deleted": msg.is_deleted,
+                "reactions": reactions.get(msg.id, []),
             }
             for msg in messages
         ]
@@ -833,14 +841,94 @@ def send_image(request):
     msg = Message.objects.create(
         sender=sender, receiver=receiver, text=caption,
         kind='image', image_url=url, image_file_id=fid or '',
+        reply_to=_resolve_reply(user_id, receiver_id, request.POST.get('reply_to')),
     )
     logger.info(f'Image sent: {sender.name} -> {receiver.name}')
     return JsonResponse({"status": "success", "id": msg.id, "url": url})
 
 
+# ── Message powers (reply / edit / forward / react / delete-for-all) ────
+
+def _resolve_reply(user_id, other_id, reply_id):
+    """Validated reply target or None (same thread, not deleted)."""
+    try:
+        rid = int(reply_id or 0)
+    except (ValueError, TypeError):
+        return None
+    if not rid:
+        return None
+    try:
+        target = Message.objects.select_related('sender').get(id=rid, is_deleted=False)
+    except Message.DoesNotExist:
+        return None
+    pair = {target.sender_id, target.receiver_id}
+    if pair != {int(user_id), int(other_id)}:
+        return None
+    return target
+
+
+def _reactions_map(messages, current_user_id):
+    """{message_id: [{'emoji', 'count', 'mine'}]} — two queries, no N+1."""
+    grouped = {}
+    if not messages:
+        return grouped
+    rows = MessageReaction.objects.filter(
+        message_id__in=[m.id for m in messages]
+    ).values('message_id', 'emoji', 'user_id')
+    per_msg = {}
+    for r in rows:
+        per_msg.setdefault(r['message_id'], []).append(r)
+    for m in messages:
+        chips = {}
+        for r in per_msg.get(m.id, []):
+            c = chips.setdefault(r['emoji'], {'emoji': r['emoji'], 'count': 0, 'mine': False})
+            c['count'] += 1
+            if r['user_id'] == current_user_id:
+                c['mine'] = True
+        grouped[m.id] = sorted(chips.values(), key=lambda c: -c['count'])
+    return grouped
+
+
+def _reply_payload(msg, current_user_id):
+    """Quoted-message snippet for a bubble, or None."""
+    ref = getattr(msg, 'reply_to', None)
+    if ref is None:
+        try:
+            ref = Message.objects.select_related('sender').get(id=msg.reply_to_id)
+        except (Message.DoesNotExist, ValueError, TypeError):
+            return None
+    if ref.is_deleted:
+        text = 'This message was deleted'
+    elif ref.kind == 'image':
+        text = 'Photo' + (f" — {ref.text[:60]}" if ref.text else '')
+    else:
+        text = (ref.text or '')[:80]
+    return {
+        'id': ref.id,
+        'name': 'You' if ref.sender_id == current_user_id else ref.sender.name,
+        'text': text,
+        'deleted': ref.is_deleted,
+    }
+
+
+def _delete_image_file_if_orphan(fid):
+    """Remove the ImageKit file only when no message still references it."""
+    if not fid:
+        return
+    if Message.objects.filter(image_file_id=fid).exists():
+        return
+    try:
+        client = _imagekit_client()
+        if client is not None:
+            client.files.delete(fid)
+    except Exception as e:
+        logger.warning(f'ImageKit delete failed for {fid}: {e}')
+
+
 @csrf_exempt
 @require_POST
 def delete_message(request):
+    """Delete for everyone: both sides see 'This message was deleted'."""
     try:
         data = json.loads(request.body)
     except Exception:
@@ -858,16 +946,124 @@ def delete_message(request):
         return JsonResponse({"status": "error", "message": "Message not found"}, status=404)
     if msg.sender_id != user_id:
         return JsonResponse({"status": "error", "message": "You can only delete your own messages"}, status=403)
-    msg.delete()
+    if msg.is_deleted:
+        return JsonResponse({"status": "ok"})
     fid = msg.image_file_id if msg.kind == 'image' else ''
-    logger.info(f'Message {data.get("message_id")} deleted by user {user_id}')
-    if fid:
-        try:
-            client = _imagekit_client()
-            if client is not None:
-                client.files.delete(fid)
-        except Exception as e:
-            logger.warning(f'ImageKit delete failed for {fid}: {e}')
+    msg.is_deleted = True
+    msg.text = ''
+    msg.image_url = ''
+    msg.image_file_id = ''
+    msg.save(update_fields=['is_deleted', 'text', 'image_url', 'image_file_id'])
+    MessageReaction.objects.filter(message=msg).delete()
+    _delete_image_file_if_orphan(fid)
+    logger.info(f'Message {msg.id} deleted for everyone by user {user_id}')
+    return JsonResponse({"status": "ok"})
+
+
+@csrf_exempt
+@require_POST
+def edit_message(request):
+    """Edit own text message. Receivers see the new text + an 'edited' tag."""
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    if _is_revoked(request):
+        return JsonResponse({"status": "error", "revoked": True, "message": "Account deactivated"}, status=401)
+    if _maintenance_on_for(request):
+        return _maintenance_block()
+    try:
+        msg = Message.objects.get(id=data.get('message_id'))
+    except (Message.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({"status": "error", "message": "Message not found"}, status=404)
+    if msg.sender_id != user_id:
+        return JsonResponse({"status": "error", "message": "You can only edit your own messages"}, status=403)
+    if msg.is_deleted or msg.kind != 'text':
+        return JsonResponse({"status": "error", "message": "This message can't be edited"}, status=400)
+    text = (data.get('content') or '').strip()[:2000]
+    if not text:
+        return JsonResponse({"status": "error", "message": "Message is empty"}, status=400)
+    from django.utils import timezone
+    msg.text = text
+    msg.edited_at = timezone.now()
+    msg.save(update_fields=['text', 'edited_at'])
+    return JsonResponse({"status": "ok"})
+
+
+REACT_EMOJIS = ('❤️', '😂', '😮', '😢', '🙏', '👍', '🔥')
+
+
+@csrf_exempt
+@require_POST
+def react_message(request):
+    """Toggle one emoji reaction per user (tap same emoji = remove)."""
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    if _is_revoked(request):
+        return JsonResponse({"status": "error", "revoked": True, "message": "Account deactivated"}, status=401)
+    if _maintenance_on_for(request):
+        return _maintenance_block()
+    emoji = (data.get('emoji') or '').strip()[:12]
+    if emoji not in REACT_EMOJIS:
+        return JsonResponse({"status": "error", "message": "Invalid emoji"}, status=400)
+    try:
+        msg = Message.objects.get(id=data.get('message_id'), is_deleted=False)
+    except (Message.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({"status": "error", "message": "Message not found"}, status=404)
+    if msg.sender_id != user_id and msg.receiver_id != user_id:
+        return JsonResponse({"status": "error", "message": "Not your conversation"}, status=403)
+    existing = MessageReaction.objects.filter(message=msg, user_id=user_id).first()
+    if existing is not None and existing.emoji == emoji:
+        existing.delete()
+        action = 'removed'
+    else:
+        MessageReaction.objects.update_or_create(
+            message=msg, user_id=user_id, defaults={'emoji': emoji})
+        action = 'added'
+    summary = _reactions_map([msg], user_id).get(msg.id, [])
+    return JsonResponse({"status": "ok", "action": action, "reactions": summary})
+
+
+@csrf_exempt
+@require_POST
+def forward_message(request):
+    """Copy a message into another chat (text or photo reference, marked Forwarded)."""
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    if _is_revoked(request):
+        return JsonResponse({"status": "error", "revoked": True, "message": "Account deactivated"}, status=401)
+    if _maintenance_on_for(request):
+        return _maintenance_block()
+    try:
+        src = Message.objects.get(id=data.get('message_id'), is_deleted=False)
+    except (Message.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({"status": "error", "message": "Message not found"}, status=404)
+    if src.sender_id != user_id and src.receiver_id != user_id:
+        return JsonResponse({"status": "error", "message": "Not your conversation"}, status=403)
+    try:
+        receiver = User.objects.get(id=data.get('receiver_id'))
+    except (User.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({"status": "error", "message": "Receiver not found"}, status=404)
+    if receiver.id == user_id:
+        return JsonResponse({"status": "error", "message": "Can't forward to yourself"}, status=400)
+    Message.objects.create(
+        sender_id=user_id, receiver=receiver, text=src.text,
+        kind=src.kind, image_url=src.image_url, image_file_id=src.image_file_id,
+        forwarded=True,
+    )
     return JsonResponse({"status": "ok"})
 
 
@@ -1466,6 +1662,65 @@ def admin_online_users(request):
     except Exception as e:
         logger.error(f'Error fetching online users: {str(e)}')
         return JsonResponse({"sessions": [], "error": str(e)}, status=500)
+
+
+@admin_required
+def admin_storage(request):
+    """Storage dashboard: DB counts + live ImageKit usage (files & bytes)."""
+    from django.db.models import Count
+    try:
+        chat_images = Message.objects.filter(kind='image', is_deleted=False).count()
+        avatars = User.objects.exclude(avatar_url='').count()
+        top_rows = (Message.objects.filter(kind='image', is_deleted=False)
+                    .values('sender__name').annotate(c=Count('id')).order_by('-c')[:5])
+        top = [{'name': r['sender__name'] or '?', 'images': r['c']} for r in top_rows]
+        recent_rows = (Message.objects.filter(kind='image', is_deleted=False)
+                       .select_related('sender', 'receiver').order_by('-timestamp')[:10])
+        recent = [{
+            'by': m.sender.name,
+            'to': m.receiver.name,
+            'text': (m.text[:40] + '…') if len(m.text or '') > 40 else (m.text or 'Photo'),
+            'time': _ist_min(m.timestamp),
+        } for m in recent_rows]
+    except Exception as e:
+        logger.error(f'Storage DB error: {e}')
+        return JsonResponse({'error': str(e)}, status=500)
+
+    live, live_error, truncated = None, None, False
+    try:
+        import base64
+        import urllib.request
+        pk = getattr(settings, 'IMAGEKIT_PRIVATE_KEY', '')
+        if not pk:
+            raise ValueError('ImageKit not configured')
+        auth = base64.b64encode(f'{pk}:'.encode()).decode()
+        total_files, total_bytes = 0, 0
+        skip = 0
+        for _ in range(5):  # max 5000 files — bounds latency on big accounts
+            req = urllib.request.Request(
+                f'https://api.imagekit.io/v1/files?limit=1000&skip={skip}',
+                headers={'Authorization': f'Basic {auth}', 'Accept': 'application/json'})
+            with urllib.request.urlopen(req, timeout=8) as res:
+                files = json.loads(res.read().decode() or '[]')
+            if not files:
+                break
+            total_files += len(files)
+            total_bytes += sum(int(f.get('size') or 0) for f in files)
+            if len(files) < 1000:
+                break
+            skip += 1000
+        else:
+            truncated = True
+        live = {'files': total_files, 'bytes': total_bytes}
+    except Exception as e:
+        live_error = str(e)[:120]
+        logger.warning(f'ImageKit usage fetch failed: {e}')
+
+    return JsonResponse({
+        'db': {'chat_images': chat_images, 'avatars': avatars},
+        'live': live, 'live_error': live_error, 'truncated': truncated,
+        'top': top, 'recent': recent,
+    })
 
 
 @admin_required

@@ -46,6 +46,29 @@ class Message(models.Model):
     image_file_id = models.CharField(max_length=128, blank=True, default='')
     timestamp = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
+    # Message powers: reply / edit / forward / delete-for-everyone
+    reply_to = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='replies')
+    edited_at = models.DateTimeField(null=True, blank=True)
+    forwarded = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
+
+    @property
+    def edited(self):
+        return self.edited_at is not None
+
+
+class MessageReaction(models.Model):
+    """One emoji reaction per user per message (tap again to remove)."""
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='reactions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reactions')
+    emoji = models.CharField(max_length=12)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('message', 'user')]
+
+    def __str__(self):
+        return f"{self.user.name} {self.emoji} on #{self.message_id}"
 
 
 class CallSignal(models.Model):

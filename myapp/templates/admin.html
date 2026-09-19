@@ -70,6 +70,7 @@
         <button class="tab-btn" id="tabBtn-users" onclick="showTab('users', this)">Users</button>
         <button class="tab-btn" id="tabBtn-broadcast" onclick="showTab('broadcast', this)">Broadcast</button>
         <button class="tab-btn" id="tabBtn-logs" onclick="showTab('logs', this)">Logs</button>
+        <button class="tab-btn" id="tabBtn-storage" onclick="showTab('storage', this)">Storage</button>
         <button class="tab-btn" id="tabBtn-server" onclick="showTab('server', this)">Server</button>
     </div>
 
@@ -221,6 +222,37 @@
         </div>
     </div>
 
+    <!-- STORAGE -->
+    <div class="tab-pane" id="tab-storage">
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-database"></i> ImageKit Storage</div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:11px;color:var(--muted)" id="storageUpdated"></span>
+                    <button class="btn btn-secondary" onclick="loadStorage()"><i class="fas fa-sync"></i> Refresh</button>
+                </div>
+            </div>
+            <div id="storageContent"><div class="empty-state">Loading…</div></div>
+        </div>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-crown"></i> Top Uploaders</div>
+            </div>
+            <div id="storageTop"><div class="empty-state">Loading…</div></div>
+        </div>
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-clock-rotate-left"></i> Recent Uploads</div>
+            </div>
+            <div style="overflow-x:auto">
+                <table class="data-table">
+                    <thead><tr><th>From</th><th>To</th><th>Caption</th><th>Time</th></tr></thead>
+                    <tbody id="storageRecent"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- SERVER -->
     <div class="tab-pane" id="tab-server">
         <div class="section">
@@ -305,6 +337,7 @@ function showTab(name, btn) {
     // Remember the tab in the URL so a refresh reopens the same tab
     try { history.replaceState(null, '', '#' + name); } catch (e) {}
     if (name === 'logs') loadLogs('all', document.querySelector('#tab-logs .filter-btn'));
+    if (name === 'storage') loadStorage();
     if (name === 'server') loadHealth();
     if (name === 'overview') { loadOnline(); loadCharts(); }
 }
@@ -797,6 +830,55 @@ setInterval(() => {
     if (document.getElementById('tab-server').classList.contains('active')) loadHealth();
 }, 10000);
 
+/* storage dashboard (ImageKit usage + DB counts) */
+function fmtBytes(b) {
+    b = +b || 0;
+    if (b < 1024) return b + ' B';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' MB';
+    return (b / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+function loadStorage() {
+    fetch('/admin-storage/')
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            document.getElementById('storageContent').innerHTML = '<div class="health-error">' + esc(d.error) + '</div>';
+            return;
+        }
+        const live = d.live
+            ? `<div class="health-item"><div class="health-label">ImageKit Files</div>
+                   <div class="health-value" style="font-size:18px;">${d.live.files}</div>
+                   <div class="health-sub">${d.truncated ? 'first 5000 files · ' : ''}live count</div></div>
+               <div class="health-item"><div class="health-label">ImageKit Size</div>
+                   <div class="health-value" style="font-size:18px;">${fmtBytes(d.live.bytes)}</div>
+                   <div class="health-sub">live usage</div></div>`
+            : `<div class="health-item"><div class="health-label">ImageKit</div>
+                   <div class="health-value" style="font-size:14px;">Offline</div>
+                   <div class="health-sub">${esc(d.live_error || 'unreachable')}</div></div>`;
+        document.getElementById('storageContent').innerHTML = `
+            <div class="health-grid">
+                <div class="health-item"><div class="health-label">Chat Photos</div>
+                    <div class="health-value" style="font-size:18px;">${d.db.chat_images}</div>
+                    <div class="health-sub">messages with images</div></div>
+                <div class="health-item"><div class="health-label">Avatars</div>
+                    <div class="health-value" style="font-size:18px;">${d.db.avatars}</div>
+                    <div class="health-sub">users with photo</div></div>
+                ${live}
+            </div>`;
+        document.getElementById('storageTop').innerHTML = (d.top && d.top.length)
+            ? d.top.map((t, i) => `<div class="ann-row"><b>#${i + 1} ${esc(t.name)}</b>
+                <div class="ann-meta">${t.images} photo${t.images > 1 ? 's' : ''} sent</div></div>`).join('')
+            : '<div class="empty-state">No uploads yet</div>';
+        document.getElementById('storageRecent').innerHTML = (d.recent && d.recent.length)
+            ? d.recent.map(r => `<tr><td>${esc(r.by)}</td><td>${esc(r.to)}</td>
+                <td>${esc(r.text)}</td><td style="white-space:nowrap">${esc(r.time)}</td></tr>`).join('')
+            : '<tr><td colspan="4" class="empty-state">No uploads yet</td></tr>';
+        document.getElementById('storageUpdated').textContent = 'Live · ' + new Date().toLocaleTimeString();
+    })
+    .catch(() => {});
+}
+
 /* maintenance */
 let maintenanceOn = false;
 function updateMaintUI(isOn) {
@@ -823,10 +905,11 @@ function toggleMaintenance() {
 loadOnline();
 loadCharts();
 loadLogs('all', null);
+loadStorage();
 // Reopen the same tab after a refresh (showTab also loads its data)
 (function restoreTab() {
     const h = (location.hash || '').replace('#', '');
-    if (['overview', 'users', 'broadcast', 'logs', 'server'].includes(h) && h !== 'overview') {
+    if (['overview', 'users', 'broadcast', 'logs', 'storage', 'server'].includes(h) && h !== 'overview') {
         const btn = document.getElementById('tabBtn-' + h);
         if (btn) showTab(h, btn);
     }

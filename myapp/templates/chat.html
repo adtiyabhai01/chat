@@ -124,6 +124,10 @@
         </div>
 
         <footer class="message-input-container" id="composerBar" style="display:none;">
+            <div class="compose-banner" id="composeBanner">
+                <div class="cb-text" id="composeBannerText"></div>
+                <button type="button" onclick="clearComposeMode()" title="Cancel"><i class="fas fa-times"></i></button>
+            </div>
             <button class="icon-btn attach-btn" title="Add media" type="button" onmousedown="event.preventDefault()" onclick="openImagePicker()"><i class="fas fa-plus"></i></button>
             <div class="composer-field">
                 <button class="icon-btn ghost" title="Photo" type="button" onmousedown="event.preventDefault()" onclick="openImagePicker()"><i class="far fa-image"></i></button>
@@ -180,11 +184,21 @@
     </div>
 </div>
 
-<!-- Message action sheet (delete own message) -->
+<!-- Message action sheet (reactions + reply/edit/forward/delete) -->
 <div id="msgSheet" class="msg-sheet" style="display:none;" onclick="if(event.target===this)closeMsgSheet()">
     <div class="msg-sheet-card">
-        <button class="msg-sheet-del" id="msgSheetDel"><i class="fas fa-trash"></i> Delete message</button>
+        <div class="react-bar" id="reactBar"></div>
+        <div id="sheetActions"></div>
         <button class="msg-sheet-cancel" onclick="closeMsgSheet()">Cancel</button>
+    </div>
+</div>
+
+<!-- Forward picker -->
+<div id="fwdModal" class="fwd-overlay" onclick="if(event.target===this)closeForward()">
+    <div class="fwd-card">
+        <div class="fwd-title">Forward to…</div>
+        <div class="fwd-list" id="fwdList"></div>
+        <button class="fwd-cancel" onclick="closeForward()">Cancel</button>
     </div>
 </div>
 
@@ -243,19 +257,22 @@
             document.getElementById('imgPreview').style.display = 'flex';
             this.value = '';
         });
-        // Long-press (mobile) / right-click (desktop) on OWN bubble -> delete sheet
+        // Long-press (mobile) / right-click (desktop) on ANY bubble -> action sheet
+        // (own bubbles get Edit + Delete-for-everyone too; see openMsgSheet)
         let pressTimer = null;
-        const ownBubble = (e) => {
-            const w = e.target.closest ? e.target.closest('.msg-wrap.sent') : null;
+        const targetBubble = (e) => {
+            const w = e.target.closest ? e.target.closest('.msg-wrap') : null;
             if (!w || !w.dataset.mid || w.dataset.mid.startsWith('tmp-')) return null;
+            // Deleted placeholders and optimistic bubbles have no actions
+            if (w.dataset.deleted === '1') return null;
             return w;
         };
         messagesContainer?.addEventListener('contextmenu', e => {
-            const w = ownBubble(e);
+            const w = targetBubble(e);
             if (w) { e.preventDefault(); openMsgSheet(w.dataset.mid); }
         });
         messagesContainer?.addEventListener('touchstart', e => {
-            const w = ownBubble(e);
+            const w = targetBubble(e);
             if (!w) return;
             const mid = w.dataset.mid;
             pressTimer = setTimeout(() => openMsgSheet(mid), 550);
@@ -406,7 +423,8 @@
         document.getElementById('callActions').style.display = '';
         document.getElementById('composerBar').style.display = '';
         if (messagesContainer) messagesContainer.innerHTML = '';
-        renderedIds = new Set(); tickById = {}; pendingTicks = new Set(); lastMsgDate = '';
+        renderedIds = new Set(); tickById = {}; pendingTicks = new Set(); msgCache = {}; lastMsgDate = '';
+        clearComposeMode();
         toggleSendState();
 
         document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
@@ -434,6 +452,51 @@
         setTimeout(() => messageInput?.focus(), 60);
     };
 
+    // ── Reply / Edit compose modes ──
+    let replyTo = null;    // {id, name, text}
+    let editingId = null;  // message id being edited
+
+    function paintComposeBanner() {
+        const bar = document.getElementById('composeBanner');
+        const txt = document.getElementById('composeBannerText');
+        if (editingId) {
+            const c = msgCache[String(editingId)];
+            txt.innerHTML = '<b>Editing message</b>' + escHTML(c ? c.text : '');
+            bar.classList.add('show');
+        } else if (replyTo) {
+            txt.innerHTML = '<b>Replying to ' + escHTML(replyTo.name) + '</b>' + escHTML(replyTo.text);
+            bar.classList.add('show');
+        } else {
+            bar.classList.remove('show');
+        }
+    }
+    window.clearComposeMode = function() {
+        replyTo = null; editingId = null;
+        paintComposeBanner();
+    };
+    function startReply(mid) {
+        const c = msgCache[String(mid)];
+        if (!c || c.deleted) return;
+        editingId = null;
+        replyTo = {
+            id: String(mid),
+            name: c.type === 'sent' ? 'yourself' : (contactName?.textContent || 'user'),
+            text: (c.img && !c.text) ? 'Photo' : (c.text || 'Photo').slice(0, 60),
+        };
+        paintComposeBanner();
+        messageInput?.focus();
+    }
+    function startEdit(mid) {
+        const c = msgCache[String(mid)];
+        if (!c || c.type !== 'sent' || c.deleted || c.img || !c.text) return;
+        replyTo = null;
+        editingId = String(mid);
+        messageInput.value = c.text || '';
+        paintComposeBanner();
+        toggleSendState();
+        messageInput?.focus();
+    }
+
     window.sendMessage = function() {
         const message = messageInput?.value?.trim();
         if (!message || !currentUserId) return;
@@ -442,6 +505,27 @@
         sendTypingStatus(false);
         clearTimeout(typingTimeout);
 
+        // Edit mode: update the bubble in place, no new message
+        if (editingId) {
+            const mid = editingId;
+            apiJSON('/edit-message/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                body: JSON.stringify({ message_id: mid, content: message })
+            })
+            .then(() => {
+                clearComposeMode();
+                messageInput.value = '';
+                toggleSendState();
+                messageInput.focus({ preventScroll: true });
+                loadMessages(currentUserId);
+            })
+            .catch(() => { if (window.callToast) callToast('Edit failed'); });
+            return;
+        }
+
+        const myReply = replyTo;
+        clearComposeMode();
         // Optimistic: show the bubble instantly with a temp id. On success the
         // temp bubble is dropped and the next server sync paints the real one,
         // so slow/out-of-order responses can never duplicate or lose messages.
@@ -449,7 +533,7 @@
         const tmpId = 'tmp-' + Date.now().toString(36) + Math.floor(Math.random() * 1e6);
         // NOTE: no date passed — the pill comes from the server sync only.
         // Passing the browser date here created duplicate/extra day pills.
-        appendMessage(message, 'sent', nowTime, false, tmpId, null);
+        appendMessage(message, 'sent', nowTime, false, tmpId, null, '', myReply ? { reply: myReply } : null);
         const optimistic = messagesContainer.lastElementChild;
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
         messageInput.value = '';
@@ -459,12 +543,12 @@
         apiJSON('/send-message/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-            body: JSON.stringify({ receiver_id: currentUserId, content: message })
+            body: JSON.stringify({ receiver_id: currentUserId, content: message, reply_to: myReply ? myReply.id : null })
         })
         .then(data => {
             if (data.status === 'success') {
                 optimistic?.remove();
-                renderedIds.delete(tmpId);
+                renderedIds.delete(tmpId); delete msgCache[tmpId];
                 loadMessages(currentUserId);
             } else {
                 optimistic?.remove();
@@ -606,7 +690,7 @@
                 // Shrunk list -> full rebuild to guarantee order
                 if (messages.length < renderedIds.size) {
                     messagesContainer.innerHTML = '';
-                    renderedIds = new Set(); tickById = {}; pendingTicks = new Set(); lastMsgDate = '';
+                    renderedIds = new Set(); tickById = {}; pendingTicks = new Set(); msgCache = {}; lastMsgDate = '';
                 }
             }
 
@@ -614,6 +698,13 @@
 
             messages.forEach(msg => {
                 const key = String(msg.id);
+                const type = (msg.sender == CURRENT_USER_ID) ? 'sent' : 'received';
+                const m = {
+                    text: msg.message || msg.text || '', type,
+                    img: msg.image || '', reply: msg.reply || null,
+                    edited: !!msg.edited, forwarded: !!msg.forwarded,
+                    deleted: !!msg.deleted, reactions: msg.reactions || [],
+                };
                 if (renderedIds.has(key)) {
                     // Live-update the read tick without any refresh (pending only)
                     if (pendingTicks.has(key) && msg.is_read) {
@@ -624,10 +715,15 @@
                         }
                         pendingTicks.delete(key);
                     }
+                    // Live-update edits / reactions / delete-for-everyone
+                    const sig = m.text + '|' + m.edited + '|' + m.deleted + '|' + reactSig(m.reactions);
+                    if (msgCache[key] && msgCache[key].sig !== sig) {
+                        msgCache[key] = Object.assign({}, msgCache[key], m, { sig });
+                        repaintBubble(key, msgCache[key]);
+                    }
                     return;
                 }
-                const type = (msg.sender == CURRENT_USER_ID) ? 'sent' : 'received';
-                appendMessage(msg.message || msg.text || '', type, msg.time || '', msg.is_read, key, msg.date, msg.image || '');
+                appendMessage(m.text, type, msg.time || '', msg.is_read, key, msg.date, m.img, m);
             });
 
             // Sidebar preview for the open chat stays current
@@ -669,32 +765,74 @@
         return `${h}:${m[2]} ${ap}`;
     }
 
-    function appendMessage(text, type, time, isRead, mid, date, img) {
+    // Cache of every rendered message: powers the action sheet + live repaints
+    // (edits, reactions, delete-for-everyone) without a full rebuild.
+    let msgCache = {};
+    const REACT_EMOJIS = ['❤️', '😂', '😮', '😢', '🙏', '👍', '🔥'];
+
+    function escHTML(s) {
+        const d = document.createElement('div');
+        d.textContent = (s === undefined || s === null) ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function reactSig(list) {
+        return (list || []).map(r => `${r.emoji}:${r.count}:${r.mine ? 1 : 0}`).join('|');
+    }
+
+    function quoteHTML(reply) {
+        if (!reply) return '';
+        return `<div class="msg-quote"><span class="msg-quote-name">${escHTML(reply.name)}</span>` +
+               `<span class="msg-quote-text">${escHTML(reply.text)}</span></div>`;
+    }
+
+    function reactsHTML(reactions, mid) {
+        if (!reactions || !reactions.length) return '';
+        return `<div class="msg-reacts">` + reactions.map(r =>
+            `<button class="react-chip${r.mine ? ' mine' : ''}" type="button" ` +
+            `onclick="event.stopPropagation();window.reactTo('${mid}','${escHTML(r.emoji)}')" title="${r.count} reaction${r.count > 1 ? 's' : ''}">` +
+            `${escHTML(r.emoji)}<small>${r.count}</small></button>`
+        ).join('') + `</div>`;
+    }
+
+    function bubbleInnerHTML(m) {
+        // m: {text, type, img, reply, edited, forwarded, deleted, reactions}
+        if (m.deleted) return `<span class="msg-text msg-deleted"><i class="fas fa-ban"></i>This message was deleted</span>`;
+        let h = '';
+        if (m.forwarded) h += `<span class="msg-fwd"><i class="fas fa-share"></i>Forwarded</span>`;
+        h += quoteHTML(m.reply);
+        if (m.img) h += `<img class="msg-img" src="${escHTML(m.img)}" loading="lazy" alt="Photo" data-full="${escHTML(m.img)}">`;
+        if (m.text) {
+            h += `<span class="msg-text">${escHTML(m.text)}</span>`;
+            if (m.edited) h += `<span class="msg-edited">(edited)</span>`;
+        }
+        return h;
+    }
+
+    function appendMessage(text, type, time, isRead, mid, date, img, extra) {
         if (!messagesContainer) return;
+        extra = extra || {};
         messagesContainer.querySelector('.no-chat-selected')?.remove();
 
         const wrap = document.createElement('div');
         wrap.className = `msg-wrap ${type}`;
         if (mid !== undefined && mid !== null) wrap.dataset.mid = String(mid);
+        if (extra.deleted) wrap.dataset.deleted = '1';
 
         const bubble = document.createElement('div');
         bubble.className = `message message-${type}`;
+        bubble.innerHTML = bubbleInnerHTML({
+            text, type, img,
+            reply: extra.reply || null,
+            edited: !!extra.edited,
+            forwarded: !!extra.forwarded,
+            deleted: !!extra.deleted,
+            reactions: [],
+        });
 
-        if (img) {
-            const im = document.createElement('img');
-            im.className = 'msg-img';
-            im.src = img;
-            im.loading = 'lazy';
-            im.alt = 'Photo';
-            im.addEventListener('click', (ev) => { ev.stopPropagation(); openViewer(img); });
-            bubble.appendChild(im);
-        }
-        if (text) {
-            const txt = document.createElement('span');
-            txt.className = 'msg-text';
-            txt.innerText = text;
-            bubble.appendChild(txt);
-        }
+        bubble.querySelector('.msg-img')?.addEventListener('click', (ev) => {
+            ev.stopPropagation(); openViewer(ev.target.dataset.full);
+        });
 
         const side = document.createElement('span');
         side.className = 'msg-side';
@@ -714,19 +852,28 @@
             side.appendChild(tick);
             if (mid !== undefined && mid !== null && !String(mid).startsWith('tmp-')) {
                 tickById[String(mid)] = tick;
-                // Desktop: hover the bubble -> 3-dots menu -> delete sheet
-                const menu = document.createElement('button');
-                menu.className = 'msg-menu';
-                menu.title = 'More';
-                menu.innerHTML = '<i class="fas fa-ellipsis"></i>';
-                menu.addEventListener('click', (ev) => { ev.stopPropagation(); openMsgSheet(String(mid)); });
-                bubble.appendChild(menu);
-                bubble.classList.add('has-menu');
             }
         }
-
         bubble.appendChild(side);
+
+        // 3-dots menu on both sides (desktop hover; mobile uses long-press)
+        if (mid !== undefined && mid !== null && !String(mid).startsWith('tmp-') && !extra.deleted) {
+            const menu = document.createElement('button');
+            menu.className = 'msg-menu';
+            menu.title = 'More';
+            menu.type = 'button';
+            menu.innerHTML = '<i class="fas fa-ellipsis"></i>';
+            menu.addEventListener('click', (ev) => { ev.stopPropagation(); openMsgSheet(String(mid)); });
+            bubble.appendChild(menu);
+            bubble.classList.add('has-menu');
+        }
         wrap.appendChild(bubble);
+        if (extra.reactions && extra.reactions.length) {
+            const r = document.createElement('div');
+            r.className = 'reacts-holder';
+            r.innerHTML = reactsHTML(extra.reactions, String(mid));
+            wrap.appendChild(r);
+        }
         messagesContainer.appendChild(wrap);
         // Pill goes right before its first message — always correct order,
         // even if an optimistic bubble is sitting at the end.
@@ -735,10 +882,62 @@
             appendDatePill(date, wrap);
         }
         if (mid !== undefined && mid !== null) {
-            renderedIds.add(String(mid));
+            const key = String(mid);
+            renderedIds.add(key);
+            msgCache[key] = {
+                text: text || '', type, img: img || '',
+                reply: extra.reply || null, edited: !!extra.edited,
+                forwarded: !!extra.forwarded, deleted: !!extra.deleted,
+                sig: (text || '') + '|' + !!extra.edited + '|' + !!extra.deleted + '|' + reactSig(extra.reactions),
+            };
             // Track only unread sent bubbles for per-poll tick checks
-            if (type === 'sent' && isRead !== true && !String(mid).startsWith('tmp-')) pendingTicks.add(String(mid));
-            else pendingTicks.delete(String(mid));
+            if (type === 'sent' && isRead !== true && !key.startsWith('tmp-')) pendingTicks.add(key);
+            else pendingTicks.delete(key);
+        }
+    }
+
+    // Live-repaint an existing bubble when an edit / reaction /
+    // delete-for-everyone lands (no scroll jump, no full rebuild).
+    function repaintBubble(mid, m) {
+        const key = String(mid);
+        const wrap = messagesContainer.querySelector(`.msg-wrap[data-mid="${key}"]`);
+        if (!wrap) return;
+        // Capture these BEFORE replacing innerHTML (it wipes the corner).
+        const stampEl = wrap.querySelector('.msg-time');
+        const stamp = stampEl ? stampEl.textContent : '';
+        const tickEl = tickById[key];
+        const wasRead = !!tickEl && tickEl.classList.contains('read');
+        const bubble = wrap.querySelector('.message');
+        bubble.innerHTML = bubbleInnerHTML(m);
+        bubble.querySelector('.msg-img')?.addEventListener('click', (ev) => {
+            ev.stopPropagation(); openViewer(ev.target.dataset.full);
+        });
+        // Re-attach time/tick corner (bubbleInnerHTML only builds content).
+        const side = document.createElement('span');
+        side.className = 'msg-side';
+        if (stamp) {
+            const t = document.createElement('span');
+            t.className = 'msg-time'; t.textContent = stamp;
+            side.appendChild(t);
+        }
+        if (m.type === 'sent') {
+            const tick = document.createElement('i');
+            tick.className = wasRead ? 'fas fa-check-double tick read' : 'fas fa-check tick sent-only';
+            tick.title = wasRead ? 'Read' : 'Sent';
+            side.appendChild(tick);
+            tickById[key] = tick;
+        }
+        bubble.appendChild(side);
+        let holder = wrap.querySelector('.reacts-holder');
+        const rh = reactsHTML(m.reactions, key);
+        if (rh) {
+            if (!holder) { holder = document.createElement('div'); holder.className = 'reacts-holder'; wrap.appendChild(holder); }
+            holder.innerHTML = rh;
+        } else if (holder) holder.remove();
+        if (m.deleted) {
+            wrap.dataset.deleted = '1';
+            bubble.querySelector('.msg-menu')?.remove();
+            bubble.classList.remove('has-menu');
         }
     }
 
@@ -881,7 +1080,7 @@
         }
     }
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') { closeViewer(); closeImagePreview(); closeMsgSheet(); }
+        if (e.key === 'Escape') { closeViewer(); closeImagePreview(); closeMsgSheet(); closeForward(); }
     });
 
     async function sendImageMessage() {
@@ -889,17 +1088,20 @@
         const caption = document.getElementById('imgCaption').value.trim().slice(0, 500);
         const blobUrl = document.getElementById('imgPreviewImg').src;
         const file = pickedFile;
+        const myReply = replyTo;
+        clearComposeMode();
         closeImagePreview();
         // Optimistic local preview
         const nowT = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
         const tmpId = 'tmp-' + Date.now().toString(36) + Math.floor(Math.random() * 1e6);
-        appendMessage(caption, 'sent', nowT, false, tmpId, todayISO(), blobUrl);
+        appendMessage(caption, 'sent', nowT, false, tmpId, todayISO(), blobUrl, myReply ? { reply: myReply } : null);
         const optimistic = messagesContainer.lastElementChild;
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
         const fd = new FormData();
         fd.append('receiver_id', currentUserId);
         fd.append('caption', caption);
         fd.append('photo', file, file.name);
+        if (myReply) fd.append('reply_to', myReply.id);
         pickedFile = null;
         try {
             const r = await fetch('/send-image/', {
@@ -913,7 +1115,7 @@
             if (d.maintenance) { window.location.reload(); return; }
             if (d.status === 'success') {
                 optimistic?.remove();
-                renderedIds.delete(tmpId);
+                renderedIds.delete(tmpId); delete msgCache[tmpId];
                 loadMessages(currentUserId);
             } else {
                 optimistic?.remove();
@@ -925,15 +1127,109 @@
         }
     }
 
-    /* delete own message */
+    /* action sheet: reactions + reply / edit / forward / delete-for-everyone */
     let sheetMid = null;
     function openMsgSheet(mid) {
-        sheetMid = mid;
+        const c = msgCache[String(mid)];
+        if (!c || c.deleted) return;
+        sheetMid = String(mid);
+        const own = c.type === 'sent';
+        // Reaction bar (tap = toggle)
+        document.getElementById('reactBar').innerHTML = REACT_EMOJIS.map(e =>
+            `<button type="button" onclick="window.reactTo('${sheetMid}','${e}')">${e}</button>`
+        ).join('');
+        // Action buttons: everyone gets Reply + Forward; own text gets Edit;
+        // own bubbles get Delete-for-everyone.
+        let h = `<button class="msg-sheet-act" type="button" id="sheetReply"><i class="fas fa-reply"></i> Reply</button>`;
+        if (own && c.text && !c.img) h += `<button class="msg-sheet-act" type="button" id="sheetEdit"><i class="fas fa-pen"></i> Edit</button>`;
+        h += `<button class="msg-sheet-act" type="button" id="sheetFwd"><i class="fas fa-share"></i> Forward</button>`;
+        if (own) h += `<button class="msg-sheet-del" type="button" id="sheetDel"><i class="fas fa-trash"></i> Delete for everyone</button>`;
+        document.getElementById('sheetActions').innerHTML = h;
+        document.getElementById('sheetReply').addEventListener('click', () => { closeMsgSheet(); startReply(sheetMid); });
+        document.getElementById('sheetFwd').addEventListener('click', () => { const m = sheetMid; closeMsgSheet(); openForward(m); });
+        document.getElementById('sheetEdit')?.addEventListener('click', () => { closeMsgSheet(); startEdit(sheetMid); });
+        document.getElementById('sheetDel')?.addEventListener('click', doDeleteSheet);
         document.getElementById('msgSheet').style.display = 'flex';
     }
     function closeMsgSheet() {
         sheetMid = null;
         document.getElementById('msgSheet').style.display = 'none';
+    }
+    window.reactTo = function(mid, emoji) {
+        closeMsgSheet();
+        if (!mid) return;
+        apiJSON('/react-message/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ message_id: mid, emoji })
+        })
+        .then(() => { if (currentUserId) loadMessages(currentUserId); })
+        .catch(() => { if (window.callToast) callToast('Reaction failed'); });
+    };
+    function doDeleteSheet() {
+        const mid = sheetMid;
+        closeMsgSheet();
+        if (!mid) return;
+        fetch('/delete-message/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ message_id: mid })
+        })
+        .then(async r => {
+            let d = {};
+            try { d = await r.json(); } catch (e) {}
+            if (d.revoked) { window.location.href = '/access-denied/'; return; }
+            if (d.status === 'ok' || d.status === 'success') {
+                // Soft delete: the placeholder arrives via the next sync
+                if (currentUserId) loadMessages(currentUserId);
+                loadUnreadBadges();
+            } else if (d.maintenance) {
+                window.location.reload();
+            } else if (window.callToast) {
+                callToast(d.message || 'Delete failed');
+            }
+        })
+        .catch(() => { if (window.callToast) callToast('Delete failed'); });
+    }
+
+    /* forward picker */
+    let fwdMid = null;
+    function openForward(mid) {
+        fwdMid = String(mid);
+        const list = document.getElementById('fwdList');
+        const items = [...document.querySelectorAll('.chat-item[data-uid]')];
+        list.innerHTML = items.length ? '' : '<div class="empty-state">No people yet</div>';
+        items.forEach(el => {
+            const uid = el.dataset.uid;
+            const nm = el.querySelector('.chat-name h4')?.textContent || 'User';
+            const av = el.querySelector('.chat-avatar img')?.src || '';
+            const b = document.createElement('button');
+            b.type = 'button'; b.className = 'fwd-row'; b.dataset.uid = uid;
+            b.innerHTML = (av ? `<img src="${escHTML(av)}" alt="">` : '') + `<span>${escHTML(nm)}</span>`;
+            b.addEventListener('click', () => doForward(uid));
+            list.appendChild(b);
+        });
+        document.getElementById('fwdModal').style.display = 'flex';
+    }
+    window.closeForward = function() {
+        fwdMid = null;
+        document.getElementById('fwdModal').style.display = 'none';
+    };
+    function doForward(uid) {
+        const mid = fwdMid;
+        closeForward();
+        if (!mid || !uid) return;
+        apiJSON('/forward-message/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ message_id: mid, receiver_id: uid })
+        })
+        .then(() => {
+            if (window.callToast) callToast('Forwarded');
+            if (String(currentUserId) === String(uid)) loadMessages(currentUserId);
+            loadUnreadBadges();
+        })
+        .catch(() => { if (window.callToast) callToast('Forward failed'); });
     }
     function maybeShowThreadEmpty() {
         if (!messagesContainer) return;
@@ -948,35 +1244,6 @@
             emp.remove();
         }
     }
-    document.getElementById('msgSheetDel')?.addEventListener('click', () => {
-        const mid = sheetMid;
-        closeMsgSheet();
-        if (!mid) return;
-        fetch('/delete-message/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-            body: JSON.stringify({ message_id: mid })
-        })
-        .then(async r => {
-            let d = {};
-            try { d = await r.json(); } catch (e) {}
-            if (d.revoked) { window.location.href = '/access-denied/'; return; }
-            if (d.status === 'ok' || d.status === 'success') {
-                document.querySelector(`.msg-wrap[data-mid="${mid}"]`)?.remove();
-                renderedIds.delete(String(mid));
-                pendingTicks.delete(String(mid));
-                delete tickById[String(mid)];
-                maybeShowThreadEmpty();
-                loadMessages(currentUserId);
-                loadUnreadBadges();
-            } else if (d.maintenance) {
-                window.location.reload();
-            } else if (window.callToast) {
-                callToast(d.message || 'Delete failed');
-            }
-        })
-        .catch(() => { if (window.callToast) callToast('Delete failed'); });
-    });
 
     // Back button after logout must never resurrect this page from cache:
     // force a server reload so logged-out users land on the login screen.
