@@ -211,24 +211,23 @@
                     <button class="filter-btn" onclick="loadLogs('ERROR', this)">Errors</button>
                     <button class="filter-btn" onclick="loadLogs('WARNING', this)">Warnings</button>
                     <button class="filter-btn" onclick="loadLogs('INFO', this)">Info</button>
+                    <span class="logs-divider"></span>
+                    <label class="logs-show" for="logsLimit">Show
+                        <select id="logsLimit" class="logs-select" onchange="loadLogs(currentLogLevel || 'all', null, this.value)">
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                            <option value="all">All</option>
+                        </select>
+                    </span>
                 </div>
             </div>
+            <div class="logs-count" id="logsCount"></div>
             <div style="overflow-x:auto">
                 <table class="data-table">
                     <thead><tr><th>Time</th><th>Level</th><th>Message</th><th>Source</th></tr></thead>
                     <tbody id="logsBody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
                 </table>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
-                <span style="font-size:12px;color:var(--muted)" id="logsCount"></span>
-                <span style="flex:1"></span>
-                <label for="logsLimit" style="font-size:12px;color:var(--muted)">Show</label>
-                <select id="logsLimit" class="filter-btn" style="cursor:pointer" onchange="loadLogs(currentLogLevel || 'all', null, this.value)">
-                    <option value="50" selected>50</option>
-                    <option value="100">100</option>
-                    <option value="200">200</option>
-                    <option value="all">All</option>
-                </select>
             </div>
         </div>
     </div>

@@ -72,10 +72,26 @@ body::after { width: 380px; height: 380px; background: rgba(56, 189, 248, 0.12);
 .badge-tablet { background: var(--warning-soft); color: #b45309; }
 
 /* Logs */
-.filter-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .filter-btn { padding: 6px 14px; background: rgba(255, 255, 255, 0.7); border: 1px solid var(--stroke); border-radius: 40px; color: var(--sub); cursor: pointer; font-size: 11px; font-weight: 700; font-family: inherit; transition: all 0.2s; }
 .filter-btn:hover { color: var(--ink); border-color: var(--accent-line); }
 .filter-btn.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+.logs-divider { width: 1px; align-self: stretch; background: var(--stroke); margin: 2px 2px; }
+.logs-show { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; color: var(--sub); }
+.logs-select {
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    padding: 6px 28px 6px 14px; cursor: pointer;
+    background: var(--ink); border: 1px solid var(--ink); border-radius: 40px;
+    color: #fff; font-family: inherit; font-size: 11px; font-weight: 800;
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23fff' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 11px center;
+    transition: box-shadow 0.2s, transform 0.15s;
+}
+.logs-select:hover { box-shadow: 0 2px 10px rgba(15, 23, 42, 0.25); }
+.logs-select:focus { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.logs-select option { background: #fff; color: var(--ink); font-weight: 600; }
+.logs-count { font-size: 11px; color: var(--faint); padding: 2px 2px 10px; }
 
 .log-level { display: inline-block; padding: 3px 10px; border-radius: 40px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .log-level.info { background: var(--info-soft); color: #0369a1; }
