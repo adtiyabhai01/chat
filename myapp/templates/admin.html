@@ -188,6 +188,43 @@
                             <td><div class="skeleton skeleton-cell w-80"></div></td>
                             <td><div class="skeleton skeleton-cell w-40"></div></td>
                         </tr>
+                        {% for x in users_data %}
+                        <tr id="row-{{ x.id }}" class="u-row{% if not x.is_active %} row-off{% endif %}" onclick="openUserDetail({{ x.id }})">
+                            <td style="white-space:nowrap">
+                                <span id="dot-{{ x.id }}" class="{% if x.is_active %}dot-online{% else %}dot-offline{% endif %}"></span>
+                                <span id="badge-{{ x.id }}" class="badge {% if x.is_active %}badge-online{% else %}badge-offline{% endif %}">{% if x.is_active %}Active{% else %}Off{% endif %}</span>
+                            </td>
+                            <td>
+                                <div class="u-cell">
+                                    <div class="u-av">{{ x.name|slice:":1" }}</div>
+                                    <div class="u-name">{{ x.name }}
+                                        <button class="copy-btn" title="Copy username" onclick="event.stopPropagation();copyText('{{ x.name|escapejs }}', this)"><i class="fas fa-copy"></i></button>
+                                        {% if x.is_online %} <span class="u-live">● online</span>{% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="u-email">{{ x.email }}
+                                <button class="copy-btn" title="Copy email" onclick="event.stopPropagation();copyText('{{ x.email|escapejs }}', this)"><i class="fas fa-copy"></i></button>
+                            </td>
+                            <td>{{ x.mobile|default:"—" }}</td>
+                            <td style="white-space:nowrap"><span class="pw-cell">{{ x.password }}</span>
+                                <button class="copy-btn" title="Copy password" onclick="event.stopPropagation();copyText('{{ x.password|escapejs }}', this)"><i class="fas fa-copy"></i></button>
+                            </td>
+                            <td>{{ x.messages }}</td>
+                            <td style="color:var(--muted);font-size:11px;white-space:nowrap">{{ x.last_seen }}</td>
+                            <td>
+                            <select class="access-select {% if x.is_active %}on{% else %}off{% endif %}" onclick="event.stopPropagation()" onchange="toggleAccess({{ x.id }}, this)">
+                                <option value="1" {% if x.is_active %}selected{% endif %}>● Active</option>
+                                <option value="0" {% if not x.is_active %}selected{% endif %}>● Deactivated</option>
+                            </select>
+                        </td>
+                        <td>
+                            <button class="del-btn" title="Delete user" onclick="event.stopPropagation();deleteUser({{ x.id }}, '{{ x.name|escapejs }}')"><i class="fas fa-trash"></i></button>
+                        </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="9" class="empty-state">No users found</td></tr>
+                        {% endfor %}
                     </tbody>
                 </table>
             </div>
@@ -1058,7 +1095,6 @@ document.getElementById('userSearch').addEventListener('input', function() {
 /* ---------- hide skeletons when data loads ---------- */
 function hideSkeletons() {
     document.querySelectorAll('.table-skeleton-row').forEach(function(row) { row.style.display = 'none'; });
-    document.querySelectorAll('.skeleton').forEach(function(el) { if (el.parentElement) el.style.display = 'none'; });
 }
 window.addEventListener('load', hideSkeletons);
 
