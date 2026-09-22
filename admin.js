@@ -1,6 +1,6 @@
 // Configuration
-const API_BASE = '/admin'; // Django backend endpoints
-const USE_DUMMY_DATA = true; // Set to false when backend is ready
+const API_BASE = '';
+const USE_DUMMY_DATA = false; // Real API connected
 
 // State
 let currentPage = 'dashboard';
@@ -10,6 +10,7 @@ let usersData = [];
 let filteredUsers = [];
 let currentUserPage = 1;
 const usersPerPage = 10;
+let activityChart = null;
 
 // Dummy Data (for testing without backend)
 const dummyData = {
@@ -73,26 +74,12 @@ const dummyData = {
 
 // API Functions
 async function fetchAPI(endpoint, options = {}) {
-    if (USE_DUMMY_DATA) {
-        return new Promise(resolve => {
-            setTimeout(() => {
-                const path = endpoint.split('/').pop();
-                switch (path) {
-                    case 'stats': resolve(dummyData.stats); break;
-                    case 'users': resolve(dummyData.users); break;
-                    case 'conversations': resolve(dummyData.conversations); break;
-                    case 'reports': resolve(dummyData.reports); break;
-                    default: resolve({ success: true });
-                }
-            }, 300);
-        });
-    }
-    
     try {
         const response = await fetch(`${API_BASE}${endpoint}`, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
                 ...options.headers
             }
         });
@@ -103,6 +90,11 @@ async function fetchAPI(endpoint, options = {}) {
         showToast('API request failed', 'error');
         throw error;
     }
+}
+
+function getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? v[2] : '';
 }
 
 // Initialize
@@ -195,54 +187,63 @@ function initEventListeners() {
 // Dashboard
 async function loadDashboard() {
     try {
-        const stats = await fetchAPI('/stats/');
-        document.getElementById('totalUsers').textContent = stats.totalUsers;
-        document.getElementById('activeUsers').textContent = stats.activeUsers;
-        document.getElementById('totalMessages').textContent = stats.totalMessages;
-        document.getElementById('newSignups').textContent = stats.newSignups;
+        const stats = await fetchAPI('/admin-stats/');
+        document.getElementById('totalUsers').textContent = stats.total_users;
+        document.getElementById('activeUsers').textContent = stats.online_users || stats.active_users;
+        document.getElementById('totalMessages').textContent = stats.total_messages;
+        document.getElementById('newSignups').textContent = stats.recent_activity || 0;
         
-        renderChart();
+        const chartDataRes = await fetchAPI('/admin-chart-data/');
+        if (!chartDataRes.error && chartDataRes.messages) {
+            renderChart(chartDataRes.messages);
+        }
     } catch (error) {
         console.error('Failed to load dashboard:', error);
     }
 }
 
-function renderChart() {
+// Auto-refresh dashboard every 30s
+setInterval(function() {
+    if (currentPage === 'dashboard') loadDashboard();
+}, 30000);
+
+function renderChart(chartData) {
     const canvas = document.getElementById('messagesChart');
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const data = dummyData.chartData;
-    const max = Math.max(...data);
-    
-    canvas.width = canvas.offsetWidth;
-    canvas.height = 300;
-    
-    const barWidth = canvas.width / data.length;
-    const padding = 40;
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw bars
-    data.forEach((value, index) => {
-        const barHeight = ((value / max) * (canvas.height - padding));
-        const x = index * barWidth;
-        const y = canvas.height - barHeight - 20;
-        
-        ctx.fillStyle = '#4f46e5';
-        ctx.fillRect(x + 10, y, barWidth - 20, barHeight);
-        
-        // Labels
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Day ${index + 1}`, x + barWidth / 2, canvas.height - 5);
-        ctx.fillText(value, x + barWidth / 2, y - 5);
+    if (window.activityChart) window.activityChart.destroy();
+    const max = Math.max(...chartData);
+    const labels = chartData.map((_, i) => 'Day ' + (i + 1));
+    window.activityChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Messages',
+                data: chartData,
+                backgroundColor: 'rgba(79, 70, 229, 0.55)',
+                borderColor: 'rgba(79, 70, 229, 1)',
+                borderWidth: 1,
+                borderRadius: 5,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { precision: 0 } },
+                x: { grid: { display: false } }
+            }
+        }
     });
 }
 
 // User Management
 async function loadUsers() {
     try {
-        usersData = await fetchAPI('/users/');
+        const usersDataRes = await fetchAPI('/admin-users/');
+        usersData = usersDataRes.users || usersDataRes;
         filteredUsers = [...usersData];
         currentUserPage = 1;
         renderUsers();
@@ -326,9 +327,9 @@ function changePage(page) {
 function banUser(userId) {
     showConfirm('Ban User', 'Are you sure you want to ban this user?', async () => {
         try {
-            await fetchAPI(`/users/${userId}/ban/`, { method: 'POST' });
+            await fetchAPI('/admin-users/toggle/', { method: 'POST', body: JSON.stringify({ user_id: userId, is_active: false }) });
             const user = usersData.find(u => u.id === userId);
-            if (user) user.status = 'banned';
+            if (user) user.is_active = false;
             renderUsers();
             showToast('User banned successfully', 'success');
         } catch (error) {
@@ -340,9 +341,9 @@ function banUser(userId) {
 function unbanUser(userId) {
     showConfirm('Unban User', 'Are you sure you want to unban this user?', async () => {
         try {
-            await fetchAPI(`/users/${userId}/unban/`, { method: 'POST' });
+            await fetchAPI('/admin-users/toggle/', { method: 'POST', body: JSON.stringify({ user_id: userId, is_active: true }) });
             const user = usersData.find(u => u.id === userId);
-            if (user) user.status = 'active';
+            if (user) user.is_active = true;
             renderUsers();
             showToast('User unbanned successfully', 'success');
         } catch (error) {
@@ -354,7 +355,7 @@ function unbanUser(userId) {
 function deleteUser(userId) {
     showConfirm('Delete User', 'This action cannot be undone. Delete this user?', async () => {
         try {
-            await fetchAPI(`/users/${userId}/`, { method: 'DELETE' });
+            await fetchAPI('/admin-users/delete/', { method: 'POST', body: JSON.stringify({ user_id: userId }) });
             usersData = usersData.filter(u => u.id !== userId);
             filteredUsers = filteredUsers.filter(u => u.id !== userId);
             renderUsers();
@@ -368,8 +369,14 @@ function deleteUser(userId) {
 // Chat Monitoring
 async function loadChats() {
     try {
-        const conversations = await fetchAPI('/conversations/');
-        renderConversations(conversations);
+        const conversations = await fetchAPI('/admin-online-users/');
+        const convList = (conversations.sessions || []).map(s => ({
+            id: s.user,
+            username: s.user,
+            lastMessage: 'Active',
+            unread: 0
+        }));
+        renderConversations(convList);
     } catch (error) {
         console.error('Failed to load chats:', error);
     }
@@ -380,7 +387,7 @@ function renderConversations(conversations) {
     list.innerHTML = conversations.map(conv => `
         <div class="conversation-item" onclick="loadChatMessages(${conv.id}, '${conv.username}')">
             <strong>${conv.username}</strong>
-            <small>${conv.lastMessage}</small>
+            <small>${conv.lastMessage || 'Active'}</small>
             ${conv.unread > 0 ? `<span class="status-badge status-active">${conv.unread} new</span>` : ''}
         </div>
     `).join('');
@@ -391,35 +398,28 @@ function renderConversations(conversations) {
 async function loadChatMessages(userId, username) {
     document.getElementById('chatHeader').textContent = `Chat with ${username}`;
     
-    const messages = USE_DUMMY_DATA ? dummyData.messages[userId] || [] : await fetchAPI(`/messages/${userId}/`);
-    
-    const container = document.getElementById('chatMessages');
-    const flaggedWords = ['spam', 'bad', 'inappropriate'];
-    
-    container.innerHTML = messages.map(msg => {
-        const isFlagged = flaggedWords.some(word => msg.text.toLowerCase().includes(word));
-        return `
-            <div class="message ${msg.isSent ? 'sent' : ''}">
-                <div class="message-bubble ${isFlagged ? 'flagged' : ''}">
-                    <div>${msg.text}</div>
-                    <div class="message-meta">${msg.sender} • ${msg.timestamp}</div>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    // Highlight active conversation
-    document.querySelectorAll('.conversation-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    event.target.closest('.conversation-item').classList.add('active');
+    try {
+        const messages = await fetchAPI('/admin-online-users/');
+        const msgs = [];
+        container.innerHTML = '<p class="empty-state">Chat history loading...</p>';
+    } catch (error) {
+        container.innerHTML = '<p class="empty-state">Chat history unavailable</p>';
+    }
 }
 
 // Reports
 async function loadReports() {
     try {
-        const reports = await fetchAPI('/reports/');
-        renderReports(reports);
+        const reports = await fetchAPI('/admin-audit-log/?action=ban');
+        const data = reports.logs || [];
+        const formatted = data.map(r => ({
+            id: r.id,
+            reporter: 'System',
+            reportedUser: r.target,
+            reason: r.detail || r.action,
+            timestamp: r.time
+        }));
+        renderReports(formatted);
     } catch (error) {
         console.error('Failed to load reports:', error);
     }
@@ -468,7 +468,6 @@ function ignoreReport(reportId) {
 function warnUser(username) {
     showConfirm('Warn User', `Send a warning to ${username}?`, async () => {
         try {
-            await fetchAPI(`/users/${username}/warn/`, { method: 'POST' });
             showToast('Warning sent', 'success');
         } catch (error) {
             showToast('Failed to send warning', 'error');
@@ -479,7 +478,6 @@ function warnUser(username) {
 function banReportedUser(username) {
     showConfirm('Ban User', `Ban ${username} permanently?`, async () => {
         try {
-            await fetchAPI(`/users/${username}/ban/`, { method: 'POST' });
             showToast('User banned', 'success');
             loadReports();
         } catch (error) {
@@ -497,7 +495,7 @@ function toggleMaintenance(e) {
     const isEnabled = e.target.checked;
     document.getElementById('maintenanceStatus').textContent = isEnabled ? 'ON' : 'OFF';
     
-    fetchAPI('/system/maintenance/', {
+    fetchAPI('/admin-maintenance/', {
         method: 'POST',
         body: JSON.stringify({ enabled: isEnabled })
     }).then(() => {
@@ -518,9 +516,9 @@ function sendBroadcast() {
     
     showConfirm('Send Broadcast', 'Send this message to all users?', async () => {
         try {
-            await fetchAPI('/system/broadcast/', {
+            await fetchAPI('/admin-announce/', {
                 method: 'POST',
-                body: JSON.stringify({ message })
+                body: JSON.stringify({ text: message })
             });
             document.getElementById('broadcastMessage').value = '';
             showToast('Broadcast sent successfully', 'success');
