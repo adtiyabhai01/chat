@@ -64,5 +64,9 @@ urlpatterns = [
     path('admin-storage/', views.admin_storage, name='admin_storage'),
     path('admin-server-health/', views.admin_server_health, name='admin_server_health'),
     path('admin-maintenance/', views.admin_maintenance_toggle, name='admin_maintenance_toggle'),
+    path('admin-force-logout/', views.admin_force_logout, name='admin_force_logout'),
+    path('admin-active-calls/', views.admin_active_calls, name='admin_active_calls'),
+    path('admin-audit-log/', views.admin_audit_log, name='admin_audit_log'),
+    path('admin-live-stats/', views.admin_live_stats, name='admin_live_stats'),
     path('save-location/', views.save_location, name='save_location'),
 ]

@@ -7,10 +7,11 @@ import os
 import re
 import time
 import json
+import math
 import logging
 from datetime import timedelta
 from django.views.decorators.http import require_POST
-from .models import User, Chat, Message, MessageReaction, AppLog, UserSession, CallSignal, SiteSetting, Announcement
+from .models import User, Chat, Message, MessageReaction, AppLog, UserSession, CallSignal, SiteSetting, Announcement, AdminAction
 from .logging_service import get_logger
 
 logger = get_logger(__name__)
@@ -1550,6 +1551,8 @@ def admin_users_toggle(request):
         except Exception:
             pass
     logger.info(f'Admin set {target.email} active={target.is_active}')
+    admin_name = request.session.get('admin_user') or request.session.get('email', 'admin')
+    log_admin_action(admin_name, 'toggle_access', target.email, f'{"Active" if target.is_active else "Inactive"}', request)
     return JsonResponse({'status': 'ok', 'is_active': target.is_active})
 
 
@@ -1598,6 +1601,8 @@ def admin_announce_create(request):
         text=text, is_active=True,
         created_by=request.session.get('admin_user', 'admin'),
     )
+    admin_name = request.session.get('admin_user', 'admin')
+    log_admin_action(admin_name, 'announce', text[:60], 'Announcement broadcast', request)
     logger.info(f'Announcement broadcast: {text[:60]}')
     return JsonResponse({'status': 'ok', 'item': {
         'id': a.id, 'text': a.text,
@@ -1621,6 +1626,8 @@ def admin_announce_toggle(request):
         Announcement.objects.filter(is_active=True).update(is_active=False)
     a.is_active = on
     a.save(update_fields=['is_active'])
+    admin_name = request.session.get('admin_user') or request.session.get('email', 'admin')
+    log_admin_action(admin_name, 'toggle_maintenance' if False else 'announce', a.text[:60], f'Announcement {"Live" if on else "Off"}', request)
     return JsonResponse({'status': 'ok', 'is_active': a.is_active})
 
 
@@ -1635,6 +1642,8 @@ def admin_announce_delete(request):
         return JsonResponse({'status': 'error', 'message': 'Not found'}, status=404)
     except Exception:
         return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    admin_name = request.session.get('admin_user') or request.session.get('email', 'admin')
+    log_admin_action(admin_name, 'delete_announce', str(data.get('id')), 'Announcement deleted', request)
     return JsonResponse({'status': 'ok'})
 
 
@@ -1670,6 +1679,8 @@ def admin_users_create(request):
         logger.error(f'Admin create user failed: {e}')
         return JsonResponse({'status': 'error', 'message': 'Could not create user'}, status=500)
     logger.info(f'Admin created user {username} ({email})')
+    admin_name = request.session.get('admin_user') or request.session.get('email', 'admin')
+    log_admin_action(admin_name, 'create', email, f'User {username} created', request)
     return JsonResponse({'status': 'ok', 'user': {
         'id': u.id, 'name': u.name, 'email': u.email, 'mobile': '',
         'password': u.password, 'is_active': True,
@@ -1692,6 +1703,8 @@ def admin_users_delete(request):
         return JsonResponse({'status': 'error', 'message': 'You cannot delete your own account'}, status=400)
     email = target.email
     target.delete()  # cascades: messages, chats, sessions, signals
+    admin_name = request.session.get('admin_user') or request.session.get('email', 'admin')
+    log_admin_action(admin_name, 'delete', email, 'User and all data deleted', request)
     logger.info(f'Admin deleted user {email}')
     return JsonResponse({'status': 'ok'})
 
@@ -2071,3 +2084,152 @@ def admin_maintenance_toggle(request):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
     return JsonResponse({'maintenance': is_maintenance_on()})
+
+
+# ── Audit Log Helper ─────────────────────────────────────────────
+
+def log_admin_action(admin_name, action, target='', detail='', request=None):
+    """Record an admin action in the AdminAction model."""
+    try:
+        ip = None
+        if request:
+            ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
+            if ip and ',' in ip:
+                ip = ip.split(',')[0].strip()
+        AdminAction.objects.create(
+            admin=admin_name,
+            action=action,
+            target=target[:200],
+            detail=detail[:500],
+            ip_address=ip,
+        )
+    except Exception as e:
+        logger.error(f'Audit log error: {e}')
+
+
+# ── Force Logout / Session Revoke ─────────────────────────────────
+
+@admin_required
+def admin_force_logout(request):
+    """Terminate a specific user's sessions."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    try:
+        target = User.objects.get(id=data.get('user_id'))
+    except (User.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'User not found'}, status=404)
+    if target.id == request.session.get('user_id'):
+        return JsonResponse({'status': 'error', 'message': 'Cannot logout yourself'}, status=400)
+    count = UserSession.objects.filter(user=target).update(is_online=False)
+    # Also flush their chat sessions
+    request.session.flush() if request.session.get('user_id') == target.id else None
+    admin_name = request.session.get('admin_user') or request.session.get('email', 'admin')
+    log_admin_action(admin_name, 'force_logout', target.email, f'Kicked {count} sessions', request)
+    return JsonResponse({'status': 'ok', 'sessions_kicked': count})
+
+
+# ── Active Calls Monitoring ───────────────────────────────────────
+
+@admin_required
+def admin_active_calls(request):
+    """List all active (unconsumed) WebRTC call signals."""
+    from django.db.models import Count
+    try:
+        signals = CallSignal.objects.filter(consumed=False).select_related('sender', 'receiver').order_by('-timestamp')[:50]
+        data = []
+        for s in signals:
+            data.append({
+                'id': s.id,
+                'call_id': s.call_id,
+                'kind': s.kind,
+                'sender': s.sender.name,
+                'receiver': s.receiver.name,
+                'payload': json.loads(s.payload or '{}'),
+                'time': _ist_full(s.timestamp),
+                'sender_id': s.sender_id,
+                'receiver_id': s.receiver_id,
+            })
+        return JsonResponse({'signals': data, 'count': len(data)})
+    except Exception as e:
+        logger.error(f'Active calls error: {e}')
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ── Audit Log API ─────────────────────────────────────────────────
+
+@admin_required
+def admin_audit_log(request):
+    """Paginated admin action log."""
+    try:
+        level_filter = request.GET.get('action', '')
+        limit_raw = (request.GET.get('limit') or '50').strip().lower()
+        try:
+            page = max(1, int(request.GET.get('page') or 1))
+        except (ValueError, TypeError):
+            page = 1
+        qs = AdminAction.objects.all().order_by('-timestamp')
+        if level_filter:
+            qs = qs.filter(action=level_filter)
+        total = qs.count()
+        try:
+            cap = int(limit_raw) if limit_raw != 'all' else 5000
+        except ValueError:
+            cap = 50
+        cap = max(1, min(cap, 5000))
+        pages = max(1, math.ceil(total / cap))
+        page = min(page, pages)
+        offset = (page - 1) * cap
+        logs = qs[offset:offset + cap]
+        logs_data = [
+            {
+                'id': l.id,
+                'admin': l.admin,
+                'action': l.action,
+                'target': l.target,
+                'detail': l.detail,
+                'ip': l.ip_address or 'N/A',
+                'time': _ist_log(l.timestamp),
+            }
+            for l in logs
+        ]
+        return JsonResponse({
+            'logs': logs_data, 'total': total, 'limit': cap,
+            'page': page, 'pages': pages,
+        })
+    except Exception as e:
+        logger.error(f'Audit log error: {e}')
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ── Real-time Dashboard Stats ─────────────────────────────────────
+
+@admin_required
+def admin_live_stats(request):
+    """Live stats for auto-refresh."""
+    from django.utils import timezone
+    from django.db.models import Count
+    try:
+        total_users = User.objects.count()
+        total_messages = Message.objects.count()
+        recent_messages = Message.objects.filter(
+            timestamp__gte=timezone.now() - timedelta(hours=24)
+        ).count()
+        cutoff = timezone.now() - timedelta(minutes=10)
+        UserSession.objects.filter(is_online=True, last_seen__lt=cutoff).update(is_online=False)
+        online_users = UserSession.objects.filter(is_online=True).count()
+        active_users = User.objects.filter(is_active=True).count()
+        return JsonResponse({
+            'total_users': total_users,
+            'active_users': active_users,
+            'online_users': online_users,
+            'total_messages': total_messages,
+            'recent_messages_24h': recent_messages,
+            'offline_users': total_users - active_users,
+        })
+    except Exception as e:
+        logger.error(f'Live stats error: {e}')
+        return JsonResponse({'error': str(e)}, status=500)

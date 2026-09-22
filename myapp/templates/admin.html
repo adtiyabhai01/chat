@@ -72,6 +72,8 @@
     <div class="tabs">
         <button class="tab-btn active" id="tabBtn-overview" onclick="showTab('overview', this)">Overview</button>
         <button class="tab-btn" id="tabBtn-users" onclick="showTab('users', this)">Users</button>
+        <button class="tab-btn" id="tabBtn-calls" onclick="showTab('calls', this)">Calls</button>
+        <button class="tab-btn" id="tabBtn-audit" onclick="showTab('audit', this)">Audit Log</button>
         <button class="tab-btn" id="tabBtn-broadcast" onclick="showTab('broadcast', this)">Broadcast</button>
         <button class="tab-btn" id="tabBtn-logs" onclick="showTab('logs', this)">Logs</button>
         <button class="tab-btn" id="tabBtn-storage" onclick="showTab('storage', this)">Storage</button>
@@ -388,6 +390,46 @@
         </div>
     </div>
 
+    <!-- CALLS -->
+    <div class="tab-pane" id="tab-calls">
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-phone"></i> Active Calls</div>
+                <button class="btn btn-secondary" onclick="loadCalls()"><i class="fas fa-sync"></i> Refresh</button>
+            </div>
+            <div id="callsContent"><div class="empty-state">Loading…</div></div>
+        </div>
+        <div class="section">
+            <div class="section-title"><i class="fas fa-info-circle"></i> Info</div>
+            <p style="font-size:12px;color:var(--muted);margin-top:8px;">Active WebRTC calls showing real-time signaling. Click to reject a call.</p>
+        </div>
+    </div>
+
+    <!-- AUDIT LOG -->
+    <div class="tab-pane" id="tab-audit">
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-shield-alt"></i> Admin Audit Log</div>
+                <div class="filter-controls">
+                    <button class="filter-btn" onclick="loadAudit('all', this)">All</button>
+                    <button class="filter-btn" onclick="loadAudit('ban', this)">Ban</button>
+                    <button class="filter-btn" onclick="loadAudit('delete', this)">Delete</button>
+                    <button class="filter-btn" onclick="loadAudit('announce', this)">Announce</button>
+                    <button class="filter-btn" onclick="loadAudit('force_logout', this)">Logout</button>
+                    <button class="filter-btn" onclick="loadAudit('create', this)">Create</button>
+                </div>
+            </div>
+            <div class="logs-count" id="auditCount"></div>
+            <div style="overflow-x:auto">
+                <table class="data-table">
+                    <thead><tr><th>Time</th><th>Admin</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+                    <tbody id="auditBody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+                </table>
+            </div>
+            <div class="logs-pager" id="auditPager"></div>
+        </div>
+    </div>
+
 </div>
 
 <!-- CREATE CREDENTIALS MODAL -->
@@ -454,6 +496,8 @@ function showTab(name, btn) {
     if (name === 'storage') loadStorage();
     if (name === 'server') loadHealth();
     if (name === 'overview') { loadOnline(); loadCharts(); }
+    if (name === 'calls') loadCalls();
+    if (name === 'audit') loadAudit('all', null);
 }
 
 /* users */
@@ -1123,6 +1167,127 @@ var originalLoadHealth = loadHealth;
 loadHealth = function() {
     originalLoadHealth();
     setTimeout(hideSkeletons, 500);
+};
+
+/* ---------- calls ---------- */
+function loadCalls() {
+    fetch('/admin-active-calls/')
+    .then(r => r.json())
+    .then(d => {
+        const container = document.getElementById('callsContent');
+        if (!d.signals || !d.signals.length) {
+            container.innerHTML = '<div class="empty-state">No active calls</div>';
+            return;
+        }
+        container.innerHTML = d.signals.map(s => `
+            <div class="ann-row">
+                <div class="ann-main">
+                    <div class="ann-text"><i class="fas fa-phone"></i> ${esc(s.kind)} call: ${esc(s.sender)} → ${esc(s.receiver)}</div>
+                    <div class="ann-meta">${esc(s.time)} · Call ID: ${esc(s.call_id?.slice(0, 8) || '?')}</div>
+                </div>
+                <div class="ann-actions">
+                    <button class="btn btn-danger btn-sm" onclick="rejectCall('${esc(s.call_id)}')">Reject</button>
+                </div>
+            </div>
+        `).join('');
+    })
+    .catch(() => {});
+}
+function rejectCall(callId) {
+    if (!confirm('Reject this call?')) return;
+    fetch('/admin-active-calls/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ call_id: callId, action: 'reject' })
+    })
+    .then(r => r.json())
+    .then(d => { loadCalls(); showToast('Call rejected', 'success'); })
+    .catch(() => {});
+}
+
+/* ---------- audit log ---------- */
+var currentAuditPage = 1;
+function loadAudit(action, btn) {
+    if (action) currentAuditPage = 1;
+    var lim = '50';
+    var q = action && action !== 'all' ? '?action=' + action + '&limit=' + lim + '&page=1' : '?limit=' + lim + '&page=1';
+    fetch('/admin-audit-log/' + q)
+    .then(r => r.json())
+    .then(d => {
+        const tb = document.getElementById('auditBody');
+        if (!d.logs || !d.logs.length) {
+            tb.innerHTML = '<tr><td colspan="5" class="empty-state">No audit logs</td></tr>';
+            return;
+        }
+        tb.innerHTML = d.logs.map(l => `
+            <tr>
+                <td class="log-time">${esc(l.time)}</td>
+                <td><strong>${esc(l.admin)}</strong></td>
+                <td><span class="log-level ${String(l.action).toLowerCase()}">${esc(l.action)}</span></td>
+                <td>${esc(l.target)}</td>
+                <td style="font-size:11px;color:var(--faint)">${esc(l.detail)}</td>
+            </tr>
+        `).join('');
+        const total = d.total || 0;
+        const pages = d.pages || 1;
+        document.getElementById('auditCount').textContent = 'Showing ' + d.logs.length + ' of ' + total + ' actions · Page ' + d.page + ' of ' + pages;
+        const pager = document.getElementById('auditPager');
+        if (pages <= 1) { pager.innerHTML = ''; return; }
+        let html = '<button class="filter-btn" ' + (d.page <= 1 ? 'disabled' : '') + ' onclick="loadAudit(\'' + action + '\', null, ' + (d.page - 1) + ')">‹ Prev</button>';
+        for (var i = 1; i <= pages; i++) {
+            html += '<button class="filter-btn ' + (i === d.page ? ' active' : '') + '" onclick="loadAudit(\'' + action + '\', null, ' + i + ')">' + i + '</button>';
+        }
+        html += '<button class="filter-btn" ' + (d.page >= pages ? 'disabled' : '') + ' onclick="loadAudit(\'' + action + '\', null, ' + (d.page + 1) + ')">Next ›</button>';
+        pager.innerHTML = html;
+    })
+    .catch(() => {});
+}
+
+/* ---------- auto-refresh live stats ---------- */
+setInterval(function() {
+    fetch('/admin-live-stats/')
+    .then(r => r.json())
+    .then(d => {
+        var ovActive = document.getElementById('ovActive');
+        var ovOff = document.getElementById('ovOff');
+        var ovOnline = document.getElementById('ovOnline');
+        if (ovActive) ovActive.textContent = d.active_users || d.active;
+        if (ovOff) ovOff.textContent = d.offline_users || d.off;
+        if (ovOnline) ovOnline.textContent = d.online_users || d.online;
+    })
+    .catch(function() {});
+}, 10000);
+
+/* ---------- force logout in user detail modal ---------- */
+function forceLogoutUser(uid) {
+    if (!confirm('Force logout this user? They will be kicked from all sessions.')) return;
+    fetch('/admin-force-logout/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ user_id: uid })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.status !== 'ok') { alert(d.message || 'Failed'); return; }
+        showToast('User force logged out', 'success');
+        closeUserModal();
+    })
+    .catch(function() { alert('Request failed'); });
+}
+
+/* ---------- update user detail modal to include force logout ---------- */
+var _origOpenUserDetail = openUserDetail;
+openUserDetail = function(uid) {
+    _origOpenUserDetail(uid);
+    // Add force logout button after actions
+    var actionsEl = document.getElementById('mActions');
+    if (actionsEl && !actionsEl.querySelector('.force-logout-btn')) {
+        var fbtn = document.createElement('button');
+        fbtn.className = 'btn btn-warning btn-sm';
+        fbtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Force Logout';
+        fbtn.onclick = function() { forceLogoutUser(uid); };
+        actionsEl.appendChild(fbtn);
+    }
 };
 </script>
 </body>

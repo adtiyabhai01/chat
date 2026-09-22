@@ -173,3 +173,39 @@ class Announcement(models.Model):
 
     def __str__(self):
         return f"{'[ON] ' if self.is_active else ''}{self.text[:60]}"
+
+
+class AdminAction(models.Model):
+    """Audit log of all admin actions for accountability."""
+    ACTION_TYPES = [
+        ('ban', 'Ban User'),
+        ('unban', 'Unban User'),
+        ('delete', 'Delete User'),
+        ('create', 'Create User'),
+        ('toggle_access', 'Toggle Access'),
+        ('toggle_maintenance', 'Toggle Maintenance'),
+        ('broadcast', 'Send Broadcast'),
+        ('announce', 'Create Announcement'),
+        ('delete_announce', 'Delete Announcement'),
+        ('force_logout', 'Force Logout'),
+        ('warn', 'Warn User'),
+        ('ignore_report', 'Ignore Report'),
+        ('call_reject', 'Reject Call'),
+    ]
+    
+    admin = models.CharField(max_length=100)
+    action = models.CharField(max_length=50, choices=ACTION_TYPES)
+    target = models.CharField(max_length=200, blank=True, default='')
+    detail = models.TextField(blank=True, default='')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['-timestamp']),
+            models.Index(fields=['action']),
+        ]
+    
+    def __str__(self):
+        return f"[{self.timestamp}] {self.admin} → {self.action}: {self.target}"
