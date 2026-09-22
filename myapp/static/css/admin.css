@@ -146,21 +146,33 @@ body.dark-theme .skeleton-row {
 body.dark-theme .table-skeleton-row td { border-bottom-color: rgba(148, 163, 184, 0.08); }
 /* ---------- end skeleton ---------- */
 
-/* ---------- dark mode toggle ---------- */
+/* ---------- dark mode toggle (single button) ---------- */
 .theme-toggle {
-    width: 44px; height: 24px; border-radius: 12px;
-    background: #ccc; border: none; cursor: pointer; position: relative;
-    transition: background 0.3s; flex-shrink: 0;
+    width: 52px; height: 26px; border-radius: 13px;
+    background: #cbd5e1; border: none; cursor: pointer; position: relative;
+    transition: background 0.3s; flex-shrink: 0; padding: 0;
+    display: inline-block; user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
-.theme-toggle:hover { background: #9ca3af; }
+.theme-toggle:hover { background: #94a3b8; }
+.theme-toggle .toggle-icon {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    font-size: 13px; line-height: 1; pointer-events: none;
+    transition: opacity 0.25s;
+}
+.theme-toggle .sun-icon { left: 5px; opacity: 1; }
+.theme-toggle .moon-icon { right: 5px; opacity: 0.45; }
 .theme-toggle::after {
-    content: ''; position: absolute; top: 2px; left: 2px;
-    width: 18px; height: 18px; border-radius: 50%;
-    background: var(--primary); transition: transform 0.3s;
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s; z-index: 1;
 }
-body.dark-theme .theme-toggle { background: #374151; }
-body.dark-theme .theme-toggle:hover { background: #4b5563; }
-body.dark-theme .theme-toggle::after { transform: translateX(20px); }
+body.dark-theme .theme-toggle { background: var(--accent); }
+body.dark-theme .theme-toggle:hover { background: var(--accent-deep); }
+body.dark-theme .theme-toggle::after { transform: translateX(26px); }
+body.dark-theme .theme-toggle .sun-icon { opacity: 0.45; }
+body.dark-theme .theme-toggle .moon-icon { opacity: 1; }
 
 /* ---------- dark theme overrides ---------- */
 body.dark-theme .sidebar { background: #111827; }

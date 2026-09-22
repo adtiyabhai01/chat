@@ -9,4 +9,7 @@ urlpatterns = [
     path('', include('myapp.urls'))
 ]
 
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Never serve user uploads via Django in production (slow + ties up
+# workers). WhiteNoise handles /static/; chat images live on ImageKit.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

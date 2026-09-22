@@ -166,7 +166,7 @@
 <div id="callOverlay" class="call-overlay" style="display:none;">
     <div class="call-card" role="dialog" aria-modal="true">
         <video id="remoteVideo" class="remote-video" autoplay playsinline style="display:none;"></video>
-        <video id="localVideo" class="local-video" autoplay playsinline muted style="display:none;"></video>
+        <video id="localVideo" class="local-video mirrored" autoplay playsinline muted style="display:none;"></video>
         <div class="call-avatar-wrap">
             <img id="callAvatar" class="call-avatar" src="" alt="Caller" style="display:none;">
             <div id="callAvatarFallback" class="call-avatar-fallback"><i class="fas fa-user"></i></div>
@@ -177,6 +177,7 @@
         <div class="call-controls">
             <button id="callMuteBtn" class="call-ctrl" title="Mute" onclick="toggleCallMute()"><i class="fas fa-microphone"></i></button>
             <button id="callCamBtn" class="call-ctrl" title="Camera" onclick="toggleCallCamera()"><i class="fas fa-video"></i></button>
+            <button id="callSwitchBtn" class="call-ctrl" title="Switch camera" onclick="switchCallCamera()" style="display:none;"><i class="fas fa-camera-rotate"></i></button>
             <button id="callAcceptBtn" class="call-ctrl accept" title="Accept" onclick="acceptCall()" style="display:none;"><i class="fas fa-phone"></i></button>
             <button id="callDeclineBtn" class="call-ctrl decline" title="Decline" onclick="declineCall()" style="display:none;"><i class="fas fa-phone-slash"></i></button>
             <button id="callHangupBtn" class="call-ctrl hangup" title="End call" onclick="hangupCall()"><i class="fas fa-phone-slash"></i></button>
@@ -1411,6 +1412,45 @@ function makePeerConnection(callId, peerId) {
     return pc;
 }
 
+/* Front camera first, with graceful fallbacks.
+   Only retry when the device rejects the facingMode itself
+   (Overconstrained/NotFound) — a denied permission rethrows at once
+   so the browser never prompts three times. */
+async function acquireCallCamera(facing, withVideo) {
+    if (!withVideo) {
+        return await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+    }
+    const tries = [
+        { video: { facingMode: { exact: facing } }, audio: true },
+        { video: { facingMode: facing }, audio: true },
+        { video: true, audio: true },
+    ];
+    let lastErr = null;
+    for (const c of tries) {
+        try {
+            return await navigator.mediaDevices.getUserMedia(c);
+        } catch (e) {
+            if (e && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError' || e.name === 'NotReadableError')) {
+                lastErr = e;
+                continue;
+            }
+            throw e;
+        }
+    }
+    throw lastErr;
+}
+
+/* Real facing reported by the track itself (fallbacks like plain
+   {video:true} may land on either camera). Desktop webcams report
+   nothing — those default to 'user' + mirrored, like every call app. */
+function detectStreamFacing(stream, fallback) {
+    try {
+        const s = stream.getVideoTracks()[0]?.getSettings();
+        if (s && (s.facingMode === 'environment' || s.facingMode === 'user')) return s.facingMode;
+    } catch (e) {}
+    return fallback;
+}
+
 async function startCall(type) {
     if (!currentUserId) { callToast('Open a chat first to call'); return; }
     if (activeCall) { callToast('Already in a call'); return; }
@@ -1422,8 +1462,9 @@ async function startCall(type) {
     const peerAvatar = document.getElementById('contactAvatar')?.src || '';
     let stream;
     try {
-        stream = await navigator.mediaDevices.getUserMedia(
-            type === 'video' ? { video: true, audio: true } : { video: false, audio: true });
+        // Front (selfie) camera first — plain {video:true} opens the rear
+        // camera on many phones, which looks like the "wrong side".
+        stream = await acquireCallCamera('user', type === 'video');
     } catch (e) {
         callToast('Camera/Mic blocked — allow permission and retry');
         return;
@@ -1432,7 +1473,7 @@ async function startCall(type) {
     const pc = makePeerConnection(callId, currentUserId);
     stream.getTracks().forEach(t => pc.addTrack(t, stream));
     activeCall = { callId: callId, peerId: currentUserId, peerName: peerName, peerAvatar: peerAvatar,
-        type: type, pc: pc, localStream: stream, isCaller: true,
+        type: type, pc: pc, localStream: stream, isCaller: true, facing: detectStreamFacing(stream, 'user'),
         muted: false, camOff: false, connected: false, pendingIce: [] };
     try {
         const offer = await pc.createOffer();
@@ -1534,14 +1575,14 @@ async function acceptCall() {
     stopRing();
     let stream;
     try {
-        stream = await navigator.mediaDevices.getUserMedia(
-            activeCall.type === 'video' ? { video: true, audio: true } : { video: false, audio: true });
+        stream = await acquireCallCamera('user', activeCall.type === 'video');
     } catch (e) {
         postSignal(activeCall.peerId, activeCall.callId, 'reject', {});
         endCallCleanup();
         callToast('Camera/Mic blocked');
         return;
     }
+    activeCall.facing = detectStreamFacing(stream, 'user');
     const c = activeCall;
     const pc = makePeerConnection(c.callId, c.peerId);
     c.pc = pc;
@@ -1593,6 +1634,35 @@ function toggleCallMute() {
     btn.innerHTML = activeCall.muted ? '<i class="fas fa-microphone-slash"></i>' : '<i class="fas fa-microphone"></i>';
 }
 
+/* Flip front <-> rear mid-call. Replaces only the video track
+   (RTCRtpSender.replaceTrack) so no renegotiation is needed. */
+async function switchCallCamera() {
+    const c = activeCall;
+    if (!c || c.type !== 'video' || !c.localStream || !c.pc) return;
+    const btn = document.getElementById('callSwitchBtn');
+    const next = (c.facing === 'user') ? 'environment' : 'user';
+    try {
+        if (btn) btn.disabled = true;
+        const tmp = await acquireCallCamera(next, true);
+        const newTrack = tmp.getVideoTracks()[0];
+        tmp.getAudioTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+        if (!newTrack) throw new Error('no video track');
+        const sender = c.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) await sender.replaceTrack(newTrack);
+        c.localStream.getVideoTracks().forEach(t => {
+            try { t.stop(); } catch (e) {}
+            try { c.localStream.removeTrack(t); } catch (e) {}
+        });
+        c.localStream.addTrack(newTrack);
+        c.facing = next;
+        document.getElementById('localVideo')?.classList.toggle('mirrored', next === 'user');
+    } catch (e) {
+        callToast('Could not switch camera');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
 function toggleCallCamera() {
     if (!activeCall?.localStream || activeCall.type !== 'video') return;
     activeCall.camOff = !activeCall.camOff;
@@ -1619,9 +1689,14 @@ function showCallUI(mode) {
     const lv = document.getElementById('localVideo');
     const tm = document.getElementById('callTimer');
     document.getElementById('callCamBtn').style.display = c.type === 'video' ? 'flex' : 'none';
+    document.getElementById('callSwitchBtn').style.display = c.type === 'video' ? 'flex' : 'none';
     rv.style.display = 'none';
     tm.style.display = 'none';
-    if (c.type === 'video' && c.localStream) { lv.srcObject = c.localStream; lv.style.display = 'block'; }
+    if (c.type === 'video' && c.localStream) {
+        lv.srcObject = c.localStream;
+        lv.classList.toggle('mirrored', (c.facing || 'user') === 'user');
+        lv.style.display = 'block';
+    }
     else { lv.srcObject = null; lv.style.display = 'none'; }
     if (mode === 'outgoing') {
         st.textContent = c.type === 'video' ? 'Video calling…' : 'Calling…';
@@ -1668,6 +1743,9 @@ function endCallCleanup() {
     if (mb) { mb.classList.remove('off'); mb.innerHTML = '<i class="fas fa-microphone"></i>'; }
     const cb = document.getElementById('callCamBtn');
     if (cb) { cb.classList.remove('off'); cb.innerHTML = '<i class="fas fa-video"></i>'; }
+    const sw = document.getElementById('callSwitchBtn');
+    if (sw) { sw.style.display = 'none'; sw.disabled = false; }
+    if (lv) lv.classList.add('mirrored');
 }
 </script>
 </body>

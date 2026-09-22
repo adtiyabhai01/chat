@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -25,13 +26,40 @@ ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 CONSOLE_ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 CONSOLE_ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Aditya")
 
-DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
+# Default OFF: production must never run with DEBUG=True by accident.
+# Local dev overrides via .env when needed.
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+
+# Fail fast in production instead of booting with known/default secrets.
+# Local DEBUG=False runs are NOT blocked (dev convenience) — only real
+# hosted platforms are enforced, detected via their auto-injected env vars.
+_ON_HOSTED_PLATFORM = any(
+    os.environ.get(k) for k in (
+        "RAILWAY_ENVIRONMENT",  # Railway always injects this
+        "VERCEL",               # Vercel injects VERCEL=1
+        "DYNO",                 # Heroku
+        "RENDER",               # Render
+        "FLY_APP_NAME",         # Fly.io
+    )
+)
+_WEAK_KEYS = {"", "change-this-in-production", "change-me", "test", "testing"}
+_WEAK_ADMIN_PASSWORDS = {"", "Aditya", "admin", "password", "change-me-strong-password"}
+if not DEBUG and _ON_HOSTED_PLATFORM:
+    if SECRET_KEY in _WEAK_KEYS:
+        raise ImproperlyConfigured(
+            "SECRET_KEY is not set (or is the default). Set SECRET_KEY env var in production."
+        )
+    if CONSOLE_ADMIN_PASSWORD in _WEAK_ADMIN_PASSWORDS:
+        raise ImproperlyConfigured(
+            "ADMIN_PASSWORD is not set (or is the default). Set ADMIN_PASSWORD env var in production."
+        )
 
 _env_hosts = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()]
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
-    ".railway.app"
+    ".railway.app",
+    ".vercel.app",
 ]
 for _h in _env_hosts:
     if _h not in ALLOWED_HOSTS:
@@ -130,13 +158,18 @@ IMAGEKIT_FOLDER = os.environ.get('IMAGEKIT_FOLDER', '/dashsocial-chat')
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
-# ⚠️ Disable for now (Railway safe)
-CSRF_COOKIE_SECURE = False
-SESSION_COOKIE_SECURE = False
-SECURE_SSL_REDIRECT = False
+# Railway/Vercel terminate TLS at the proxy and forward plain HTTP to the
+# app — tell Django to trust the X-Forwarded-Proto header, otherwise
+# request.is_secure() is always False behind the proxy.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# Enable later when stable
-# SECURE_SSL_REDIRECT = True
+# Secure cookies in production; plain HTTP cookies for local dev.
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+
+# Keep False on Railway/Vercel (the proxy handles HTTPS). Only turn on via
+# env if the app serves TLS directly.
+SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "False").lower() == "true"
 
 # ========================
 # TIMEZONE — India (IST)
@@ -162,5 +195,9 @@ LOGGING = {
 }
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://*.railway.app"
+    "https://*.railway.app",
+    "https://*.vercel.app",
 ]
+for _o in [o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]:
+    if _o not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_o)

@@ -209,7 +209,9 @@ setInterval(function() {
 
 function renderChart(chartData) {
     const canvas = document.getElementById('messagesChart');
-    if (!canvas) return;
+    if (!canvas || typeof Chart === 'undefined') return;
+    if (!chartData || !chartData.length) return;
+    window.lastChartData = chartData;
     const ctx = canvas.getContext('2d');
     if (window.activityChart) window.activityChart.destroy();
     const max = Math.max(...chartData);
@@ -581,9 +583,9 @@ if (localStorage.getItem('adminDarkMode') === '1') {
     if (toggleBtn) toggleBtn.textContent = '☀️';
 }
 
-// Resize chart on window resize
+// Resize chart on window resize (Chart.js is responsive, this is a fallback)
 window.addEventListener('resize', () => {
-    if (currentPage === 'dashboard') {
-        renderChart();
+    if (currentPage === 'dashboard' && window.lastChartData) {
+        renderChart(window.lastChartData);
     }
 });

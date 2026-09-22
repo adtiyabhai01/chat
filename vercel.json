@@ -5,5 +5,5 @@
       "maxDuration": 60
     }
   },
-  "buildCommand": "python manage.py migrate --noinput"
+  "buildCommand": "python manage.py collectstatic --noinput"
 }

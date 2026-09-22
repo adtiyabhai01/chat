@@ -29,6 +29,7 @@
 </head>
 {% if show_login %}
 <body>
+<script>try{if(localStorage.getItem('adminDarkMode')==='1')document.body.classList.add('dark-theme');}catch(e){}</script>
 <div class="login-wrap">
     <div class="login-box">
         <div class="ig-card">
@@ -50,6 +51,7 @@
 </body>
 {% else %}
 <body>
+<script>try{if(localStorage.getItem('adminDarkMode')==='1')document.body.classList.add('dark-theme');}catch(e){}</script>
 <div class="container">
 
     <div class="header">

@@ -726,6 +726,11 @@ body::before, body::after { display: none !important; content: none !important; 
   border: 1px solid #e5e7eb;
 }
 
+/* Self-view of the FRONT camera behaves like a mirror (standard in
+   every video-call app). Rear camera stays unmirrored. Remote video
+   is never mirrored. */
+.local-video.mirrored { transform: scaleX(-1); }
+
 .call-avatar { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 1px solid #e5e7eb; }
 .call-avatar-fallback {
   width: 72px; height: 72px;
