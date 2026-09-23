@@ -49,6 +49,7 @@ urlpatterns = [
     path('admin/', views.admin_console, name='admin_console'),
     path('admin-dashboard/', RedirectView.as_view(url='/admin/', permanent=False)),
     path('admin-users/', RedirectView.as_view(url='/admin/', permanent=False)),
+    path('admin-users/list/', views.admin_users_list, name='admin_users_list'),
     path('admin-users/toggle/', views.admin_users_toggle, name='admin_users_toggle'),
     path('admin-users/delete/', views.admin_users_delete, name='admin_users_delete'),
     path('admin-users/create/', views.admin_users_create, name='admin_users_create'),

@@ -1530,6 +1530,33 @@ def get_call_signals(request):
 # ── Admin Dashboard ──────────────────────────────────────────────────────────
 
 @admin_required
+def admin_users_list(request):
+    """JSON user list for the standalone dashboard (admin_dash)."""
+    try:
+        from django.utils import timezone
+        users = list(User.objects.all().order_by('id'))
+        latest = {}
+        for s in UserSession.objects.order_by('-last_seen'):
+            if s.user_id not in latest:
+                latest[s.user_id] = s.last_seen
+        data = [
+            {
+                'id': u.id,
+                'username': u.name,
+                'email': u.email,
+                'status': 'active' if u.is_active else 'banned',
+                'lastActive': _ist_full(latest[u.id]) if u.id in latest else 'Never',
+                'messages': Message.objects.filter(Q(sender=u) | Q(receiver=u)).count(),
+            }
+            for u in users
+        ]
+        return JsonResponse({'users': data, 'total': len(data)})
+    except Exception as e:
+        logger.error(f'Users list error: {e}')
+        return JsonResponse({'users': [], 'total': 0, 'error': str(e)}, status=500)
+
+
+@admin_required
 def admin_users_toggle(request):
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'POST only'}, status=405)
@@ -1934,6 +1961,7 @@ def admin_online_users(request):
         sessions = UserSession.objects.select_related('user').order_by('-last_seen')[:50]
         data = [
             {
+                'user_id': s.user_id,
                 'user': s.user.name,
                 'email': s.user.email,
                 'is_online': s.is_online,
@@ -2136,7 +2164,28 @@ def admin_force_logout(request):
 
 @admin_required
 def admin_active_calls(request):
-    """List all active (unconsumed) WebRTC call signals."""
+    """List all active (unconsumed) WebRTC call signals.
+
+    POST {call_id} marks that call's signals consumed = rejected by admin.
+    """
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+        except Exception:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+        call_id = str(data.get('call_id') or '')[:64]
+        if not call_id:
+            return JsonResponse({'status': 'error', 'message': 'call_id required'}, status=400)
+        try:
+            n = CallSignal.objects.filter(call_id=call_id, consumed=False).update(consumed=True)
+        except Exception as e:
+            if _is_missing_schema_error(e):
+                return JsonResponse({'status': 'error', 'message': 'Calls unavailable: DB migration pending'}, status=503)
+            raise
+        admin_name = request.session.get('admin_user') or request.session.get('email', 'admin')
+        log_admin_action(admin_name, 'call_reject', call_id[:8], f'Rejected call ({n} signals)', request)
+        logger.info(f'Admin rejected call {call_id[:8]}')
+        return JsonResponse({'status': 'ok', 'rejected': n})
     from django.db.models import Count
     try:
         signals = CallSignal.objects.filter(consumed=False).select_related('sender', 'receiver').order_by('-timestamp')[:50]

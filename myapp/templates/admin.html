@@ -24,6 +24,10 @@
         .admin-chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 40px; background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent-deep); font-size: 12px; font-weight: 700; }
         .btn-danger { background: var(--error-soft); color: #b91c1c; border: 1px solid rgba(220,38,38,0.3); }
         .btn-danger:hover { background: rgba(220,38,38,0.15); }
+        .admin-toast { position: fixed; bottom: 24px; right: 24px; z-index: 2000; padding: 12px 20px; border-radius: 12px; font-size: 13px; font-weight: 700; color: #fff; background: var(--ink); box-shadow: var(--shadow-lg); opacity: 0; transform: translateY(12px); transition: opacity 0.25s, transform 0.25s; pointer-events: none; }
+        .admin-toast.show { opacity: 1; transform: translateY(0); }
+        .admin-toast.success { background: var(--success); }
+        .admin-toast.error { background: var(--error); }
         @media (max-width: 768px) { .login-box { max-width: 420px; } }
     </style>
 </head>
@@ -1107,11 +1111,27 @@ loadStorage();
 // Reopen the same tab after a refresh (showTab also loads its data)
 (function restoreTab() {
     const h = (location.hash || '').replace('#', '');
-    if (['overview', 'users', 'broadcast', 'logs', 'storage', 'server'].includes(h) && h !== 'overview') {
+    if (['overview', 'users', 'calls', 'audit', 'broadcast', 'logs', 'storage', 'server'].includes(h) && h !== 'overview') {
         const btn = document.getElementById('tabBtn-' + h);
         if (btn) showTab(h, btn);
     }
 })();
+
+/* toast notifications (used by calls / audit / force-logout actions) */
+var adminToastTimer = null;
+function showToast(message, type) {
+    var t = document.getElementById('adminToast');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'adminToast';
+        t.className = 'admin-toast';
+        document.body.appendChild(t);
+    }
+    t.textContent = message || '';
+    t.className = 'admin-toast show ' + (type || 'success');
+    clearTimeout(adminToastTimer);
+    adminToastTimer = setTimeout(function() { t.classList.remove('show'); }, 3000);
+}
 fetch('/admin-maintenance/').then(r => r.json()).then(d => updateMaintUI(!!d.maintenance)).catch(() => {});
 
 /* ---------- dark mode toggle ---------- */
@@ -1209,10 +1229,15 @@ function rejectCall(callId) {
 
 /* ---------- audit log ---------- */
 var currentAuditPage = 1;
-function loadAudit(action, btn) {
-    if (action) currentAuditPage = 1;
+var currentAuditAction = 'all';
+function loadAudit(action, btn, page) {
+    if (action) { currentAuditAction = action; currentAuditPage = 1; }
+    if (page) currentAuditPage = Math.max(1, parseInt(page, 10) || 1);
     var lim = '50';
-    var q = action && action !== 'all' ? '?action=' + action + '&limit=' + lim + '&page=1' : '?limit=' + lim + '&page=1';
+    var act = currentAuditAction || 'all';
+    var q = act !== 'all'
+        ? '?action=' + encodeURIComponent(act) + '&limit=' + lim + '&page=' + currentAuditPage
+        : '?limit=' + lim + '&page=' + currentAuditPage;
     fetch('/admin-audit-log/' + q)
     .then(r => r.json())
     .then(d => {

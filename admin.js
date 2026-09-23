@@ -244,13 +244,15 @@ function renderChart(chartData) {
 // User Management
 async function loadUsers() {
     try {
-        const usersDataRes = await fetchAPI('/admin-users/');
-        usersData = usersDataRes.users || usersDataRes;
+        const usersDataRes = await fetchAPI('/admin-users/list/');
+        usersData = usersDataRes.users || [];
         filteredUsers = [...usersData];
         currentUserPage = 1;
         renderUsers();
     } catch (error) {
         console.error('Failed to load users:', error);
+        document.getElementById('usersTableBody').innerHTML =
+            '<tr><td colspan="6" class="loading">Failed to load users</td></tr>';
     }
 }
 
@@ -373,9 +375,9 @@ async function loadChats() {
     try {
         const conversations = await fetchAPI('/admin-online-users/');
         const convList = (conversations.sessions || []).map(s => ({
-            id: s.user,
+            id: s.user_id,
             username: s.user,
-            lastMessage: 'Active',
+            lastMessage: s.is_online ? 'Active now' : ('Last seen ' + s.last_seen),
             unread: 0
         }));
         renderConversations(convList);
@@ -399,11 +401,43 @@ function renderConversations(conversations) {
 
 async function loadChatMessages(userId, username) {
     document.getElementById('chatHeader').textContent = `Chat with ${username}`;
-    
+    const container = document.getElementById('chatMessages');
+    container.innerHTML = '<p class="empty-state">Loading chat history...</p>';
+
+    // Highlight active conversation
+    document.querySelectorAll('.conversation-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    if (event && event.target) {
+        const activeItem = event.target.closest('.conversation-item');
+        if (activeItem) activeItem.classList.add('active');
+    }
+
+    const uid = parseInt(userId, 10);
+    if (!uid) {
+        container.innerHTML = '<p class="empty-state">Chat history unavailable</p>';
+        return;
+    }
     try {
-        const messages = await fetchAPI('/admin-online-users/');
-        const msgs = [];
-        container.innerHTML = '<p class="empty-state">Chat history loading...</p>';
+        const d = await fetchAPI(`/admin-user-detail/${uid}/`);
+        if (d.error || !d.recent || !d.recent.length) {
+            container.innerHTML = '<p class="empty-state">No messages yet</p>';
+            return;
+        }
+        const flaggedWords = ['spam', 'bad', 'inappropriate'];
+        container.innerHTML = d.recent.map((m, i) => {
+            const text = m.text || '';
+            const isFlagged = flaggedWords.some(word => text.toLowerCase().includes(word));
+            const isSent = m.direction !== 'received';
+            return `
+                <div class="message ${isSent ? 'sent' : ''}">
+                    <div class="message-bubble ${isFlagged ? 'flagged' : ''}">
+                        <div>${text}</div>
+                        <div class="message-meta">${m.direction === 'sent' ? 'to' : 'from'} ${m.other} • ${m.time}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
     } catch (error) {
         container.innerHTML = '<p class="empty-state">Chat history unavailable</p>';
     }
@@ -532,7 +566,11 @@ function sendBroadcast() {
 
 // Utilities
 function formatDate(dateString) {
+    // Backend sends IST display strings ('YYYY-MM-DD HH:MM' / 'DD/MM/YYYY…')
+    // which Date() cannot parse — show those as-is instead of 'Invalid Date'.
+    if (!dateString || dateString === 'Never') return dateString || '—';
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
     const now = new Date();
     const diff = now - date;
     const minutes = Math.floor(diff / 60000);
