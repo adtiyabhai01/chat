@@ -54,6 +54,9 @@
                         <div class="upload-title"><i class="fas fa-folder-open"></i> Shared files</div>
                         <button class="g-btn-ghost" type="button" onclick="refreshFiles()" style="padding:8px 14px;font-size:12px;"><i class="fas fa-sync"></i> Refresh</button>
                     </div>
+                    {% if migration_pending %}
+                    <p class="upload-err" id="migrateWarn">Files storage is syncing — new uploads will appear once the database update finishes. (Admin: run migrations on the production database.)</p>
+                    {% endif %}
                     <div id="fileList">
                         {% for f in files %}
                         <div class="file-row" id="file-{{ f.id }}">
@@ -193,6 +196,10 @@ function refreshFiles() {
         const files = d.files || [];
         document.getElementById('fileCount').textContent = files.length + ' files';
         list.innerHTML = '';
+        if (d.migration_pending) {
+            list.innerHTML = '<div class="files-empty">Files storage is syncing — check back in a minute.</div>';
+            return;
+        }
         if (!files.length) {
             list.innerHTML = '<div class="files-empty">No ZIP files shared yet — upload the first one above.</div>';
             return;

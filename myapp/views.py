@@ -2174,11 +2174,22 @@ def files_page(request):
     except (User.DoesNotExist, ValueError, TypeError):
         request.session.flush()
         return redirect('login')
-    files = list(SharedFile.objects.select_related('uploaded_by').all()[:200])
+    try:
+        files = list(SharedFile.objects.select_related('uploaded_by').all()[:200])
+        payload = [_shared_file_payload(f, me.id) for f in files]
+        pending = False
+    except Exception as e:
+        # Prod DB predates migrate 0016: show the page with a clear banner
+        # instead of a bare 500. Real fix: run migrations on the prod DB.
+        if not _is_missing_schema_error(e):
+            raise
+        logger.warning('files_page: SharedFile table missing, serving empty list. Run migrate 0016.')
+        payload, pending = [], True
     return render(request, 'files.html', {
         'user': me,
-        'files': [_shared_file_payload(f, me.id) for f in files],
+        'files': payload,
         'max_mb': getattr(settings, 'SHARED_ZIP_MAX_MB', 50),
+        'migration_pending': pending,
     })
 
 
@@ -2188,7 +2199,12 @@ def files_list(request):
         return JsonResponse({'files': []})
     if _is_revoked(request):
         return JsonResponse({'revoked': True}, status=401)
-    files = list(SharedFile.objects.select_related('uploaded_by').all()[:200])
+    try:
+        files = list(SharedFile.objects.select_related('uploaded_by').all()[:200])
+    except Exception as e:
+        if not _is_missing_schema_error(e):
+            raise
+        return JsonResponse({'files': [], 'migration_pending': True})
     return JsonResponse({'files': [_shared_file_payload(f, current_user_id) for f in files]})
 
 
@@ -2223,6 +2239,9 @@ def files_upload(request):
         f = SharedFile(file=up, name=clean_name[:255], size=up.size or 0, uploaded_by=me)
         f.save()
     except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse(
+                {'status': 'error', 'message': 'Files unavailable: DB migration pending'}, status=503)
         logger.error(f'ZIP upload failed: {e}')
         return JsonResponse({'status': 'error', 'message': 'Upload failed, try again'}, status=500)
     logger.info(f'ZIP shared: {me.name} -> {clean_name} ({up.size or 0} bytes)')
@@ -2231,7 +2250,12 @@ def files_upload(request):
 
 @custom_login_required
 def files_download(request, file_id):
-    f = get_object_or_404(SharedFile, id=file_id)
+    try:
+        f = get_object_or_404(SharedFile, id=file_id)
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse({'status': 'error', 'message': 'Files unavailable: DB migration pending'}, status=503)
+        raise
     try:
         handle = f.file.open('rb')
     except Exception:
@@ -2254,6 +2278,10 @@ def files_delete(request, file_id):
         f = SharedFile.objects.get(id=file_id)
     except (SharedFile.DoesNotExist, ValueError, TypeError):
         return JsonResponse({'status': 'error', 'message': 'File not found'}, status=404)
+    except Exception as e:
+        if _is_missing_schema_error(e):
+            return JsonResponse({'status': 'error', 'message': 'Files unavailable: DB migration pending'}, status=503)
+        raise
     if f.uploaded_by_id != user_id and not _is_admin_email(user_id):
         return JsonResponse({'status': 'error', 'message': 'Not allowed'}, status=403)
     name = f.name
