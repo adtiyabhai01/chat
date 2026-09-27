@@ -2242,6 +2242,13 @@ def files_upload(request):
         if _is_missing_schema_error(e):
             return JsonResponse(
                 {'status': 'error', 'message': 'Files unavailable: DB migration pending'}, status=503)
+        if isinstance(e, OSError):
+            # Read-only disk (e.g. Vercel without MEDIA_ROOT=/tmp).
+            logger.error(f'ZIP upload failed (storage): {e}')
+            return JsonResponse(
+                {'status': 'error',
+                 'message': 'Server storage unavailable (admin: set MEDIA_ROOT=/tmp)'},
+                status=500)
         logger.error(f'ZIP upload failed: {e}')
         return JsonResponse({'status': 'error', 'message': 'Upload failed, try again'}, status=500)
     logger.info(f'ZIP shared: {me.name} -> {clean_name} ({up.size or 0} bytes)')
