@@ -175,6 +175,21 @@ class Announcement(models.Model):
         return f"{'[ON] ' if self.is_active else ''}{self.text[:60]}"
 
 
+class SharedFile(models.Model):
+    """ZIP files shared by users on the /files/ page."""
+    file = models.FileField(upload_to='shared_files/')
+    name = models.CharField(max_length=255)
+    size = models.BigIntegerField(default=0)
+    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='shared_files')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.size} bytes)"
+
+
 class AdminAction(models.Model):
     """Audit log of all admin actions for accountability."""
     ACTION_TYPES = [

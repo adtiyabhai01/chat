@@ -1,4 +1,4 @@
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Q
 from django.conf import settings
@@ -11,7 +11,7 @@ import math
 import logging
 from datetime import timedelta
 from django.views.decorators.http import require_POST
-from .models import User, Chat, Message, MessageReaction, AppLog, UserSession, CallSignal, SiteSetting, Announcement, AdminAction
+from .models import User, Chat, Message, MessageReaction, AppLog, UserSession, CallSignal, SiteSetting, Announcement, AdminAction, SharedFile
 from .logging_service import get_logger
 
 logger = get_logger(__name__)
@@ -2112,6 +2112,159 @@ def admin_maintenance_toggle(request):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
     return JsonResponse({'maintenance': is_maintenance_on()})
+
+
+# ── Shared Files (/files/) ─────────────────────────────────────────────
+# Users upload ZIP files, everyone logged-in sees the list and can
+# download. Only .zip, size-capped via SHARED_ZIP_MAX_MB.
+
+ZIP_MIME_TYPES = {
+    'application/zip', 'application/x-zip-compressed', 'application/x-zip',
+    'multipart/x-zip', 'application/octet-stream',
+}
+
+
+def _shared_file_payload(f, current_user_id=None):
+    try:
+        size = f.file.size
+    except Exception:
+        size = f.size or 0
+    can_delete = (
+        current_user_id is not None
+        and (f.uploaded_by_id == current_user_id or _is_admin_email(current_user_id))
+    )
+    return {
+        'id': f.id,
+        'name': f.name,
+        'size': size,
+        'size_human': _human_size(size),
+        'by': f.uploaded_by.name if getattr(f, 'uploaded_by', None) else '—',
+        'by_me': f.uploaded_by_id == current_user_id,
+        'time': _ist_min(f.uploaded_at),
+        'can_delete': can_delete,
+    }
+
+
+def _human_size(n):
+    try:
+        n = int(n or 0)
+    except (ValueError, TypeError):
+        return '—'
+    if n < 1024:
+        return f'{n} B'
+    if n < 1024 * 1024:
+        return f'{n / 1024:.1f} KB'
+    if n < 1024 * 1024 * 1024:
+        return f'{n / 1024 / 1024:.1f} MB'
+    return f'{n / 1024 / 1024 / 1024:.2f} GB'
+
+
+def _is_admin_email(user_id):
+    try:
+        u = User.objects.get(id=user_id)
+        return u.email.strip().lower() == getattr(settings, 'ADMIN_EMAIL', '')
+    except (User.DoesNotExist, ValueError, TypeError):
+        return False
+
+
+@custom_login_required
+def files_page(request):
+    try:
+        me = User.objects.get(id=request.session.get('user_id'))
+    except (User.DoesNotExist, ValueError, TypeError):
+        request.session.flush()
+        return redirect('login')
+    files = list(SharedFile.objects.select_related('uploaded_by').all()[:200])
+    return render(request, 'files.html', {
+        'user': me,
+        'files': [_shared_file_payload(f, me.id) for f in files],
+        'max_mb': getattr(settings, 'SHARED_ZIP_MAX_MB', 50),
+    })
+
+
+def files_list(request):
+    current_user_id = request.session.get('user_id')
+    if not current_user_id:
+        return JsonResponse({'files': []})
+    if _is_revoked(request):
+        return JsonResponse({'revoked': True}, status=401)
+    files = list(SharedFile.objects.select_related('uploaded_by').all()[:200])
+    return JsonResponse({'files': [_shared_file_payload(f, current_user_id) for f in files]})
+
+
+@require_POST
+def files_upload(request):
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JsonResponse({'status': 'error', 'message': 'Login required'}, status=401)
+    if _is_revoked(request):
+        return JsonResponse({'status': 'error', 'revoked': True, 'message': 'Account deactivated'}, status=401)
+    if _maintenance_on_for(request):
+        return _maintenance_block()
+    try:
+        me = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'User not found'}, status=404)
+    up = request.FILES.get('zip_file')
+    if up is None:
+        return JsonResponse({'status': 'error', 'message': 'No file selected'}, status=400)
+    clean_name = (up.name or '').strip()
+    if not clean_name.lower().endswith('.zip'):
+        return JsonResponse({'status': 'error', 'message': 'Only .zip files allowed'}, status=400)
+    if (up.content_type or '') not in ZIP_MIME_TYPES:
+        return JsonResponse({'status': 'error', 'message': 'Not a ZIP file'}, status=400)
+    max_bytes = getattr(settings, 'SHARED_ZIP_MAX_MB', 50) * 1024 * 1024
+    if up.size and up.size > max_bytes:
+        return JsonResponse(
+            {'status': 'error',
+             'message': f'File too large (max {getattr(settings, "SHARED_ZIP_MAX_MB", 50)} MB)'},
+            status=400)
+    try:
+        f = SharedFile(file=up, name=clean_name[:255], size=up.size or 0, uploaded_by=me)
+        f.save()
+    except Exception as e:
+        logger.error(f'ZIP upload failed: {e}')
+        return JsonResponse({'status': 'error', 'message': 'Upload failed, try again'}, status=500)
+    logger.info(f'ZIP shared: {me.name} -> {clean_name} ({up.size or 0} bytes)')
+    return JsonResponse({'status': 'ok', 'file': _shared_file_payload(f, user_id)})
+
+
+@custom_login_required
+def files_download(request, file_id):
+    f = get_object_or_404(SharedFile, id=file_id)
+    try:
+        handle = f.file.open('rb')
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'File missing on server'}, status=404)
+    resp = FileResponse(handle, as_attachment=True, filename=f.name)
+    resp['Content-Type'] = 'application/zip'
+    return resp
+
+
+@require_POST
+def files_delete(request, file_id):
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JsonResponse({'status': 'error', 'message': 'Login required'}, status=401)
+    if _is_revoked(request):
+        return JsonResponse({'status': 'error', 'revoked': True, 'message': 'Account deactivated'}, status=401)
+    if _maintenance_on_for(request):
+        return _maintenance_block()
+    try:
+        f = SharedFile.objects.get(id=file_id)
+    except (SharedFile.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'File not found'}, status=404)
+    if f.uploaded_by_id != user_id and not _is_admin_email(user_id):
+        return JsonResponse({'status': 'error', 'message': 'Not allowed'}, status=403)
+    name = f.name
+    try:
+        if f.file:
+            f.file.delete(save=False)
+    except Exception as e:
+        logger.warning(f'Shared file disk delete failed for {name}: {e}')
+    f.delete()
+    logger.info(f'Shared ZIP deleted by user {user_id}: {name}')
+    return JsonResponse({'status': 'ok'})
 
 
 # ── Audit Log Helper ─────────────────────────────────────────────
