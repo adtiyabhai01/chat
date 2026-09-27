@@ -2124,9 +2124,47 @@ ZIP_MIME_TYPES = {
 }
 
 
+def _upload_shared_zip(up):
+    """Upload a ZIP to ImageKit (same storage as chat photos).
+
+    Returns (url, file_id). Raises ValueError when ImageKit isn't
+    configured or the upload fails.
+    """
+    from django.utils.text import get_valid_filename
+    client = _imagekit_client()
+    if client is None:
+        raise ValueError('Image storage not configured')
+    safe = get_valid_filename(up.name or 'file.zip') or 'file.zip'
+    if not safe.lower().endswith('.zip'):
+        safe += '.zip'
+    try:
+        up.seek(0)
+    except Exception:
+        pass
+    try:
+        res = client.files.upload(
+            file=up.read(),
+            file_name=f"shared_{int(time.time())}_{safe}",
+            folder=getattr(settings, 'IMAGEKIT_FOLDER', '/dashsocial-chat') + '/files',
+            use_unique_file_name=True,
+        )
+    except Exception as e:
+        logger.error(f'ImageKit ZIP upload failed: {e}')
+        raise ValueError('Upload failed, try again')
+    if isinstance(res, dict):
+        url = res.get('url') or ''
+        fid = res.get('fileId') or res.get('file_id') or ''
+    else:
+        url = getattr(res, 'url', '') or ''
+        fid = getattr(res, 'file_id', '') or getattr(res, 'fileId', '') or ''
+    if not url:
+        raise ValueError('Upload failed, try again')
+    return url, fid
+
+
 def _shared_file_payload(f, current_user_id=None):
     try:
-        size = f.file.size
+        size = f.file.size if f.file else (f.size or 0)
     except Exception:
         size = f.size or 0
     can_delete = (
@@ -2235,20 +2273,36 @@ def files_upload(request):
             {'status': 'error',
              'message': f'File too large (max {getattr(settings, "SHARED_ZIP_MAX_MB", 50)} MB)'},
             status=400)
+    # Primary storage: ImageKit (works on read-only hosts like Vercel
+    # and survives redeploys). Local disk is only a fallback for dev
+    # setups without ImageKit keys.
     try:
-        f = SharedFile(file=up, name=clean_name[:255], size=up.size or 0, uploaded_by=me)
+        url, fid = _upload_shared_zip(up)
+        f = SharedFile(file='', file_url=url, remote_file_id=fid,
+                       name=clean_name[:255], size=up.size or 0, uploaded_by=me)
         f.save()
+    except ValueError as e:
+        if str(e) == 'Image storage not configured':
+            try:
+                f = SharedFile(file=up, name=clean_name[:255], size=up.size or 0, uploaded_by=me)
+                f.save()
+            except Exception as e2:
+                if _is_missing_schema_error(e2):
+                    return JsonResponse(
+                        {'status': 'error', 'message': 'Files unavailable: DB migration pending'}, status=503)
+                if isinstance(e2, OSError):
+                    logger.error(f'ZIP upload failed (storage): {e2}')
+                    return JsonResponse(
+                        {'status': 'error', 'message': 'Server storage unavailable, try again later'},
+                        status=500)
+                logger.error(f'ZIP upload failed: {e2}')
+                return JsonResponse({'status': 'error', 'message': 'Upload failed, try again'}, status=500)
+        else:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
     except Exception as e:
         if _is_missing_schema_error(e):
             return JsonResponse(
                 {'status': 'error', 'message': 'Files unavailable: DB migration pending'}, status=503)
-        if isinstance(e, OSError):
-            # Read-only disk (e.g. Vercel without MEDIA_ROOT=/tmp).
-            logger.error(f'ZIP upload failed (storage): {e}')
-            return JsonResponse(
-                {'status': 'error',
-                 'message': 'Server storage unavailable (admin: set MEDIA_ROOT=/tmp)'},
-                status=500)
         logger.error(f'ZIP upload failed: {e}')
         return JsonResponse({'status': 'error', 'message': 'Upload failed, try again'}, status=500)
     logger.info(f'ZIP shared: {me.name} -> {clean_name} ({up.size or 0} bytes)')
@@ -2263,6 +2317,13 @@ def files_download(request, file_id):
         if _is_missing_schema_error(e):
             return JsonResponse({'status': 'error', 'message': 'Files unavailable: DB migration pending'}, status=503)
         raise
+    # Remote (ImageKit) files: redirect straight to the file. Browsers
+    # download .zip automatically, and this keeps big downloads off the
+    # app server (important on serverless hosts with response limits).
+    if f.file_url:
+        return redirect(f.file_url)
+    if not f.file:
+        return JsonResponse({'status': 'error', 'message': 'File missing on server'}, status=404)
     try:
         handle = f.file.open('rb')
     except Exception:
@@ -2292,6 +2353,13 @@ def files_delete(request, file_id):
     if f.uploaded_by_id != user_id and not _is_admin_email(user_id):
         return JsonResponse({'status': 'error', 'message': 'Not allowed'}, status=403)
     name = f.name
+    if f.remote_file_id:
+        try:
+            client = _imagekit_client()
+            if client is not None:
+                client.files.delete(f.remote_file_id)
+        except Exception as e:
+            logger.warning(f'Shared file remote delete failed for {name}: {e}')
     try:
         if f.file:
             f.file.delete(save=False)

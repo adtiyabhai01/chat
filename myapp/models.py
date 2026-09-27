@@ -176,8 +176,15 @@ class Announcement(models.Model):
 
 
 class SharedFile(models.Model):
-    """ZIP files shared by users on the /files/ page."""
-    file = models.FileField(upload_to='shared_files/')
+    """ZIP files shared by users on the /files/ page.
+
+    Storage is ImageKit (same as chat photos) so uploads work on
+    read-only hosts like Vercel and survive redeploys. `file` is the
+    legacy local-disk fallback used only when ImageKit isn't configured.
+    """
+    file = models.FileField(upload_to='shared_files/', blank=True, default='')
+    file_url = models.URLField(max_length=500, blank=True, default='')
+    remote_file_id = models.CharField(max_length=128, blank=True, default='')
     name = models.CharField(max_length=255)
     size = models.BigIntegerField(default=0)
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='shared_files')
