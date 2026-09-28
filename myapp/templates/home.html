@@ -24,8 +24,6 @@
         <header class="topbar">
             <span class="breadcrumb">DashSocial &nbsp;/&nbsp; <span>Home</span></span>
             <div class="topbar-right">
-                <div class="chip chip-green"><div class="dot"></div>Online</div>
-                <div class="chip chip-dark"><i class="far fa-clock" style="color:var(--sub);font-size:10px"></i><span id="topClock">--:--</span></div>
                 <!-- Mobile only: rail nav is hidden on small screens, so logout lives here -->
                 <a href="{% url 'logout_view' %}" class="logout-mobile" title="Log out" aria-label="Log out"><i class="fas fa-sign-out-alt"></i></a>
             </div>
@@ -152,17 +150,14 @@
 
     function tick(){
         const n = new Date();
-        let time = '', short = '', date = '';
+        let time = '', date = '';
         try {
             time  = n.toLocaleTimeString('en-IN',{timeZone:IST,hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}).toUpperCase();
-            short = n.toLocaleTimeString('en-IN',{timeZone:IST,hour:'numeric',minute:'2-digit',hour12:true}).toUpperCase();
             date  = n.toLocaleDateString('en-IN',{timeZone:IST,weekday:'short',month:'short',day:'numeric'});
         } catch (e) {
             time = n.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
-            short = n.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
             date = n.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
         }
-        document.getElementById('topClock').textContent = short;
         document.getElementById('bigClock').textContent = time;
         document.getElementById('bigDate').textContent  = date;
         document.getElementById('sideDate').textContent = date;
