@@ -70,9 +70,4 @@ urlpatterns = [
     path('admin-audit-log/', views.admin_audit_log, name='admin_audit_log'),
     path('admin-live-stats/', views.admin_live_stats, name='admin_live_stats'),
     path('save-location/', views.save_location, name='save_location'),
-    path('files/', views.files_page, name='files'),
-    path('files/list/', views.files_list, name='files_list'),
-    path('files/upload/', views.files_upload, name='files_upload'),
-    path('files/download/<int:file_id>/', views.files_download, name='files_download'),
-    path('files/delete/<int:file_id>/', views.files_delete, name='files_delete'),
 ]

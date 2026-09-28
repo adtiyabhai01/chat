@@ -144,9 +144,6 @@ MEDIA_URL = '/media/'
 # Local default stays ./media
 MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
 
-# Max size (MB) for a single ZIP upload on the /files/ page.
-SHARED_ZIP_MAX_MB = int(os.environ.get('SHARED_ZIP_MAX_MB', '50') or 50)
-
 # ========================
 # IMAGEKIT (chat photo storage)
 # ========================
