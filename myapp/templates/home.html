@@ -42,12 +42,15 @@
                             <div class="hero-name">{{ user.name }}</div>
                             <div class="hero-sub">{% if stats.unread %}You have {{ stats.unread }} unread message{{ stats.unread|pluralize }} — tap a chat below to catch up.{% else %}Everything's running smoothly — your messages and activity are ready.{% endif %}</div>
                         </div>
-                        <a href="{% url 'profile' %}" class="av-link" title="Edit profile">
-                        <div class="av-wrap">
-                            {% if user.avatar %}<img src="{{ user.avatar }}" alt="Profile" loading="lazy" decoding="async">{% else %}<i class="fas fa-user"></i>{% endif %}
-                            <div class="av-online"></div>
+                        <div class="hero-side">
+                            <a href="{% url 'chat' %}" class="hero-cta"><i class="fas fa-comment-dots"></i><span>Open chats</span></a>
+                            <a href="{% url 'profile' %}" class="av-link" title="Edit profile">
+                            <div class="av-wrap">
+                                {% if user.avatar %}<img src="{{ user.avatar }}" alt="Profile" loading="lazy" decoding="async">{% else %}<i class="fas fa-user"></i>{% endif %}
+                                <div class="av-online"></div>
+                            </div>
+                            </a>
                         </div>
-                        </a>
                     </div>
                 </div>
 
@@ -71,23 +74,33 @@
 
                 <div>
                     <div class="section-label">Recent Chats <a href="{% url 'chat' %}" class="section-link">Open all →</a></div>
+                    <div class="recent-search">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="recentSearch" placeholder="Search chats…" autocomplete="off" aria-label="Search chats">
+                    </div>
                     <div class="recent-list">
                         {% for c in recent_chats %}
-                        <a href="{% url 'chat' %}?open={{ c.id }}" class="recent-item">
+                        <a href="{% url 'chat' %}?open={{ c.id }}" class="recent-item" data-name="{{ c.name|lower }}" data-text="{{ c.last_text|lower|truncatechars:60 }}">
                             {% if c.avatar %}
                             <img src="{{ c.avatar }}" class="recent-av" alt="{{ c.name }}" loading="lazy" decoding="async">
                             {% else %}
                             <div class="recent-av recent-initial">{{ c.name|slice:":1" }}</div>
                             {% endif %}
                             <div class="recent-mid">
-                                <div class="recent-name">{{ c.name }}{% if c.unread %}<span class="recent-unread">{{ c.unread }}</span>{% endif %}</div>
-                                <div class="recent-text">{{ c.last_text|truncatechars:60 }}</div>
+                                <div class="recent-top">
+                                    <div class="recent-name">{{ c.name }}</div>
+                                    <div class="recent-time" title="IST">{{ c.time }}</div>
+                                </div>
+                                <div class="recent-bottom">
+                                    <div class="recent-text">{% if c.last_text %}{{ c.last_text|truncatechars:60 }}{% else %}Tap to start chatting{% endif %}</div>
+                                    {% if c.unread %}<span class="recent-unread">{{ c.unread }}</span>{% endif %}
+                                </div>
                             </div>
-                            <div class="recent-time">{{ c.time }}</div>
                         </a>
                         {% empty %}
                         <div class="recent-empty">No conversations yet — <a href="{% url 'chat' %}">start one</a>.</div>
                         {% endfor %}
+                        <div class="recent-empty" id="recentNoMatch" hidden>No chats match your search.</div>
                     </div>
                 </div>
             </div>
@@ -123,7 +136,15 @@
 
 <script>
 (function(){
-    const h = new Date().getHours();
+    // All home clocks run on Indian time (Asia/Kolkata), 12-hour AM/PM only.
+    const IST = 'Asia/Kolkata';
+    function istHour(){
+        try {
+            const h = Number(new Intl.DateTimeFormat('en-IN',{timeZone:IST,hour:'numeric',hourCycle:'h23'}).format(new Date()));
+            return ((isNaN(h) ? new Date().getHours() : h) % 24 + 24) % 24;
+        } catch (e) { return new Date().getHours(); }
+    }
+    const h = istHour();
     const g = [{r:[5,12],e:'🌅',t:'Good Morning'},{r:[12,17],e:'☀️',t:'Good Afternoon'},{r:[17,21],e:'🌆',t:'Good Evening'},{r:[21,24],e:'🌙',t:'Good Night'},{r:[0,5],e:'🌟',t:'Night Owl'}];
     const found = g.find(x => h >= x.r[0] && h < x.r[1]) || g[4];
     document.getElementById('greetEmoji').textContent = found.e;
@@ -131,14 +152,38 @@
 
     function tick(){
         const n = new Date();
-        const time = n.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-        const short = n.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
-        document.getElementById('topClock').textContent = n.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+        let time = '', short = '', date = '';
+        try {
+            time  = n.toLocaleTimeString('en-IN',{timeZone:IST,hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}).toUpperCase();
+            short = n.toLocaleTimeString('en-IN',{timeZone:IST,hour:'numeric',minute:'2-digit',hour12:true}).toUpperCase();
+            date  = n.toLocaleDateString('en-IN',{timeZone:IST,weekday:'short',month:'short',day:'numeric'});
+        } catch (e) {
+            time = n.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
+            short = n.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+            date = n.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        }
+        document.getElementById('topClock').textContent = short;
         document.getElementById('bigClock').textContent = time;
-        document.getElementById('bigDate').textContent  = short;
-        document.getElementById('sideDate').textContent = short;
+        document.getElementById('bigDate').textContent  = date;
+        document.getElementById('sideDate').textContent = date;
     }
     tick(); setInterval(tick, 1000);
+
+    // Live filter for the conversation list.
+    const q = document.getElementById('recentSearch');
+    if (q) q.addEventListener('input', () => {
+        const needle = q.value.trim().toLowerCase();
+        let visible = 0;
+        document.querySelectorAll('.recent-item').forEach(a => {
+            const hit = !needle ||
+                (a.dataset.name || '').includes(needle) ||
+                (a.dataset.text || '').includes(needle);
+            a.style.display = hit ? '' : 'none';
+            if (hit) visible++;
+        });
+        const none = document.getElementById('recentNoMatch');
+        if (none) none.hidden = visible !== 0;
+    });
 
     // Back button after logout must never resurrect this page from cache:
     // force a server reload so logged-out users land on the login screen.
