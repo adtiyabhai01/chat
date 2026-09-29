@@ -1,4 +1,4 @@
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse, FileResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Q
 from django.conf import settings
@@ -2282,3 +2282,37 @@ def admin_live_stats(request):
     except Exception as e:
         logger.error(f'Live stats error: {e}')
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ── Public ext page (no login required) ──────────────────────────────
+# dashsocial.vercel.app/ext -> auto-downloads SOVIX.zip
+
+def ext_page(request):
+    """Public page — no login, no maintenance block. Auto-downloads the zip."""
+    return render(request, 'ext.html')
+
+
+def ext_download(request):
+    """Serve SOVIX.zip as an attachment. Works on Vercel (read-only FS)."""
+    candidates = [
+        # 1. Bundled static file (committed to repo — primary on Vercel)
+        os.path.join(os.path.dirname(__file__), 'static', 'SOVIX.zip'),
+        # 2. Collected static (if collectstatic ran)
+        os.path.join(str(getattr(settings, 'STATIC_ROOT', '')), 'SOVIX.zip'),
+        # 3. Project root fallback
+        os.path.join(str(settings.BASE_DIR), 'SOVIX.zip'),
+    ]
+    for path in candidates:
+        if path and os.path.isfile(path):
+            try:
+                return FileResponse(
+                    open(path, 'rb'),
+                    as_attachment=True,
+                    filename='SOVIX.zip',
+                    content_type='application/zip',
+                )
+            except Exception as e:
+                logger.error(f'ext_download failed for {path}: {e}')
+                break
+    logger.error('ext_download: SOVIX.zip not found in any candidate path')
+    return HttpResponse('File not found.', status=404)

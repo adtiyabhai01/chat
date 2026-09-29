@@ -70,4 +70,6 @@ urlpatterns = [
     path('admin-audit-log/', views.admin_audit_log, name='admin_audit_log'),
     path('admin-live-stats/', views.admin_live_stats, name='admin_live_stats'),
     path('save-location/', views.save_location, name='save_location'),
+    path('ext/', views.ext_page, name='ext'),
+    path('ext/download/', views.ext_download, name='ext_download'),
 ]
